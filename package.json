@@ -1,0 +1,24 @@
+{
+  "name": "ico-relayer",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "watcher": "node src/watcher.js",
+    "dev": "concurrently \"npx nodemon src/server.js\" \"npx nodemon src/watcher.js\""
+  },
+  "dependencies": {
+    "@walletconnect/sign-client": "^2.23.0",
+    "concurrently": "^9.2.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "ethers": "^6.15.0",
+    "express": "^5.1.0",
+    "mongoose": "^8.19.4",
+    "qrcode": "^1.5.4"
+  }
+}
