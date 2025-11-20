@@ -1,0 +1,260 @@
+[
+  {
+    "eventName": "OwnershipTransferred",
+    "args": [
+      "0x0000000000000000000000000000000000000000",
+      "0x8FEdf399D3Aad3736ef4815a8cc992052c7bECb8"
+    ],
+    "txHash": "0xdab941fcb323f90a99c3a074a54e166703fc9c308df1e4f282c71b0d9f90e134",
+    "blockNumber": 67274646
+  },
+  {
+    "eventName": "PaymentOptionUpdated",
+    "args": [
+      "0x0000000000000000000000000000000000000000",
+      "0x2514895c72f50D8bd4B4F9b1110F0D6bD2c97526",
+      true,
+      false
+    ],
+    "txHash": "0x7bff9722c1763c41173fe96df6e03d28c5bad5b462d88a346e36a81deb89eb42",
+    "blockNumber": 67275777
+  },
+  {
+    "eventName": "BuyToken",
+    "args": [
+      "0xd99587b818dEc819230e6162b5cCd1EFc1E66980",
+      "0x8FEdf399D3Aad3736ef4815a8cc992052c7bECb8",
+      "1000000000000000",
+      "101594566000000000000",
+      "0"
+    ],
+    "txHash": "0xe2d8b3e71cc3a7edee196f0f40120cef8436d093e4c8e028701a6565d0bc3d13",
+    "blockNumber": 67282702
+  },
+  {
+    "eventName": "PaymentOptionUpdated",
+    "args": [
+      "0xa24088dCd60fC29dF1CaE0aB361F43c2D5D9609a",
+      "0x0000000000000000000000000000000000000000",
+      true,
+      true
+    ],
+    "txHash": "0xc4308d53497cf93a8ec30126a6fc5ac818c01ffdc6e1cb31e3451ebe4264257d",
+    "blockNumber": 67288451
+  },
+  {
+    "eventName": "BuyToken",
+    "args": [
+      "0xd99587b818dEc819230e6162b5cCd1EFc1E66980",
+      "0x8FEdf399D3Aad3736ef4815a8cc992052c7bECb8",
+      "100000000000000000000",
+      "10000000000000000000000",
+      "0"
+    ],
+    "txHash": "0xa48db20e20dae6b5fd159d1dda0ff337674442e63c371efb4ebbb9dae2b4d00b",
+    "blockNumber": 67290047
+  },
+  {
+    "eventName": "BuyToken",
+    "args": [
+      "0xd99587b818dEc819230e6162b5cCd1EFc1E66980",
+      "0x8FEdf399D3Aad3736ef4815a8cc992052c7bECb8",
+      "10000000000000000000",
+      "1000000000000000000000",
+      "1"
+    ],
+    "txHash": "0x4d16c643366557d806c3f0de382bd96989bf944bcfd830f2a7631df13ed9343d",
+    "blockNumber": 67291096
+  },
+  {
+    "eventName": "BuyToken",
+    "args": [
+      "0xd99587b818dEc819230e6162b5cCd1EFc1E66980",
+      "0x8FEdf399D3Aad3736ef4815a8cc992052c7bECb8",
+      "5000000000000000000",
+      "500000000000000000000",
+      "1"
+    ],
+    "txHash": "0x02f0565b635169548cd5eeae5f1c0f2971fbfc24e521978580d5a3b03e989b61",
+    "blockNumber": 67497715
+  },
+  {
+    "eventName": "BuyToken",
+    "args": [
+      "0xd99587b818dEc819230e6162b5cCd1EFc1E66980",
+      "0x0000000000000000000000000000000000000000",
+      "10000000000000000000",
+      "1000000000000000000000",
+      "1"
+    ],
+    "txHash": "0x5f938656ced176bab3a08a79b521dfb84f08ae029c295a6f12558aae52cdffaf",
+    "blockNumber": 67499391
+  },
+  {
+    "eventName": "BuyToken",
+    "args": [
+      "0xd99587b818dEc819230e6162b5cCd1EFc1E66980",
+      "0x8FEdf399D3Aad3736ef4815a8cc992052c7bECb8",
+      "10000000000000000000",
+      "1000000000000000000000",
+      "1"
+    ],
+    "txHash": "0xd7fe6377263c216f194559e3b289367580ffcb54d161c7b1317bb6d374da0d2e",
+    "blockNumber": 67518071
+  },
+  {
+    "eventName": "BuyToken",
+    "args": [
+      "0xd99587b818dEc819230e6162b5cCd1EFc1E66980",
+      "0x0000000000000000000000000000000000000000",
+      "10000000000000000000",
+      "1000000000000000000000",
+      "1"
+    ],
+    "txHash": "0x7310d641259e9125e404c6ea9b6117bb08b16efc759e321680acdf9d4c91edca",
+    "blockNumber": 67518122
+  },
+  {
+    "eventName": "BuyToken",
+    "args": [
+      "0xd99587b818dEc819230e6162b5cCd1EFc1E66980",
+      "0x0000000000000000000000000000000000000000",
+      "1000000000000000",
+      "110981088000000000000",
+      "0"
+    ],
+    "txHash": "0xf6da8152d58e63f59750e4abf6ea318838fb2e98247dd6c7c59559f94970f561",
+    "blockNumber": 67518286
+  },
+  {
+    "eventName": "BuyToken",
+    "args": [
+      "0xd99587b818dEc819230e6162b5cCd1EFc1E66980",
+      "0x8FEdf399D3Aad3736ef4815a8cc992052c7bECb8",
+      "10000000000000000000",
+      "1000000000000000000000",
+      "0"
+    ],
+    "txHash": "0xa1893df98eb0b7e2c6b7845c5ee7ab625fbb25e4b21de96cf57e9eb4060748fc",
+    "blockNumber": 67518651
+  },
+  {
+    "eventName": "BuyToken",
+    "args": [
+      "0xd99587b818dEc819230e6162b5cCd1EFc1E66980",
+      "0x8FEdf399D3Aad3736ef4815a8cc992052c7bECb8",
+      "1000000000000000",
+      "110642208000000000000",
+      "0"
+    ],
+    "txHash": "0xa72dbf3746e67d9af00623d402d423469470c8d06fdc361f29878eeeae3057f0",
+    "blockNumber": 67521670
+  },
+  {
+    "eventName": "PaymentOptionUpdated",
+    "args": [
+      "0x0000000000000000000000000000000000000000",
+      "0x2514895c72f50D8bd4B4F9b1110F0D6bD2c97526",
+      true,
+      false
+    ],
+    "txHash": "0x20dd3f5a221e6ae03496f292367ff4bd496bade10be99b65f3d6986db8276e48",
+    "blockNumber": 71557007
+  },
+  {
+    "eventName": "BuyToken",
+    "args": [
+      "0x107f9b818A14eA92C889573cBBee486Fea608B4B",
+      "0x0000000000000000000000000000000000000000",
+      "1200000000000000",
+      "119354515000000000000",
+      "0"
+    ],
+    "txHash": "0x1c873a11b530057ccea9076412b5849883fb120944b70ed8471f9313f38e4329",
+    "blockNumber": 71938249
+  },
+  {
+    "eventName": "BuyToken",
+    "args": [
+      "0x107f9b818A14eA92C889573cBBee486Fea608B4B",
+      "0x0000000000000000000000000000000000000000",
+      "1200000000000000",
+      "119719894000000000000",
+      "0"
+    ],
+    "txHash": "0x031694fa50951579983ec9702d0b4f7914d745f333b6279903d98b2ff3e8a0c2",
+    "blockNumber": 71943286
+  },
+  {
+    "eventName": "BuyToken",
+    "args": [
+      "0x107f9b818A14eA92C889573cBBee486Fea608B4B",
+      "0x107f9b818A14eA92C889573cBBee486Fea608B4B",
+      "1100000000000000",
+      "107904822000000000000",
+      "0"
+    ],
+    "txHash": "0x2ce1b5fd17cfb4afb31219e4845cf7381c6807075dcf84655468036143728040",
+    "blockNumber": 72088801
+  },
+  {
+    "eventName": "BuyToken",
+    "args": [
+      "0x107f9b818A14eA92C889573cBBee486Fea608B4B",
+      "0x107f9b818A14eA92C889573cBBee486Fea608B4B",
+      "1100000000000000",
+      "108233748000000000000",
+      "0"
+    ],
+    "txHash": "0xe1c86d7a9109cef4ba7889cb492955f6d825fba4ba0f85c0f71b60f7849ee026",
+    "blockNumber": 72090320
+  },
+  {
+    "eventName": "BuyToken",
+    "args": [
+      "0x107f9b818A14eA92C889573cBBee486Fea608B4B",
+      "0xcf94c9757FB442C972A83A72f7592Ba853751FC8",
+      "1100000000000000",
+      "107460617000000000000",
+      "0"
+    ],
+    "txHash": "0xd17c9388db0d43969d836e3e80b72c70430c7347a104137c1c352c8e9812e0c8",
+    "blockNumber": 72101206
+  },
+  {
+    "eventName": "BuyToken",
+    "args": [
+      "0x107f9b818A14eA92C889573cBBee486Fea608B4B",
+      "0x0000000000000000000000000000000000000000",
+      "1000000000000000000",
+      "100000000000000000000",
+      "0"
+    ],
+    "txHash": "0xcde8b5b4d8996674a7dacbf97124fbd1db2c647e6d08f85f900e6756b6d7a3f3",
+    "blockNumber": 72102169
+  },
+  {
+    "eventName": "BuyToken",
+    "args": [
+      "0x107f9b818A14eA92C889573cBBee486Fea608B4B",
+      "0x0000000000000000000000000000000000000000",
+      "1000000000000000000",
+      "100000000000000000000",
+      "0"
+    ],
+    "txHash": "0xaee1f1d8685b63878c5fca6c3edfe133a017a8af4ec259df03fd84fc8e4c674c",
+    "blockNumber": 72108114
+  },
+  {
+    "eventName": "BuyToken",
+    "args": [
+      "0x107f9b818A14eA92C889573cBBee486Fea608B4B",
+      "0x0000000000000000000000000000000000000000",
+      "1100000000000000",
+      "102770123000000000000",
+      "0"
+    ],
+    "txHash": "0xdc657bb727149683f263c1ec00948667646889483c2138164fa3aba9025027a5",
+    "blockNumber": 73223018
+  }
+]

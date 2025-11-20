@@ -1,89 +1,63 @@
-// block-fetch.js
-const { JsonRpcProvider, formatEther } = require("ethers");
+const { ethers, JsonRpcProvider } = require("ethers");
 const fs = require("fs");
-const path = require("path");
+require("dotenv").config();
 
-// -------------------- CONFIG --------------------
-const provider = new JsonRpcProvider("https://0xrpc.io/sep");
-const BLOCK = 9653176;
-const LOG_FILE = path.join(__dirname, "output.log");
+const { BSC_RPC } = process.env;
 
-// ANSI color codes
-const COLOR = {
-    green: "\x1b[32m",
-    yellow: "\x1b[33m",
-    blue: "\x1b[34m",
-    red: "\x1b[31m",
-    reset: "\x1b[0m",
-};
+if (!BSC_RPC) throw new Error("❌ Missing BSC_RPC in .env");
 
-// Log to file
-function writeToFile(type, msg) {
-    const line = `[${new Date().toISOString()}] [${type}] ${msg}\n`;
-    fs.appendFileSync(LOG_FILE, line);
-}
+const provider = new JsonRpcProvider(BSC_RPC);
 
-// Custom console wrappers
-function logSuccess(msg) {
-    console.log(COLOR.green + msg + COLOR.reset);
-    writeToFile("SUCCESS", msg);
-}
-function logInfo(msg) {
-    console.info(COLOR.blue + msg + COLOR.reset);
-    writeToFile("INFO", msg);
-}
-function logWarn(msg) {
-    console.warn(COLOR.yellow + msg + COLOR.reset);
-    writeToFile("WARN", msg);
-}
-function logError(msg) {
-    console.error(COLOR.red + msg + COLOR.reset);
-    writeToFile("ERROR", msg);
-}
+// ---------------------------------------------------------
+// 📌 Function to fetch full transaction details and save JSON
+// ---------------------------------------------------------
+async function getTransactionByHash(txHash) {
+    console.log("⏳ Fetching transaction...");
 
-// Delay helper
-const delay = (ms) => new Promise((res) => setTimeout(res, ms));
+    const tx = await provider.getTransaction(txHash);
 
-// -------------------- MAIN FUNCTION --------------------
-async function fetchTxDetails() {
-    logInfo(`⏳ Fetching block ${BLOCK}...`);
-
-    const block = await provider.getBlock(BLOCK);
-
-    if (!block || !block.transactions || block.transactions.length === 0) {
-        logWarn("No transactions in this block.");
-        return;
+    if (!tx) {
+        console.log("❌ Transaction not found");
+        return null;
     }
 
-    logSuccess(`🧾 Transactions in block: ${block.transactions.length}`);
-    console.log("");
+    console.log("⏳ Fetching receipt...");
+    const receipt = await provider.getTransactionReceipt(txHash);
 
-    for (const txHash of block.transactions) {
-        await delay(100); // avoid rate limits
+    const result = {
+        hash: tx.hash,
+        from: tx.from,
+        to: tx.to,
+        value: tx.value ? tx.value.toString() : null,
+        nonce: tx.nonce,
+        gasPrice: tx.gasPrice?.toString(),
+        data: tx.data,
+        blockNumber: tx.blockNumber,
+        receipt: receipt
+            ? {
+                  status: receipt.status,
+                  gasUsed: receipt.gasUsed.toString(),
+                  blockNumber: receipt.blockNumber,
+                  contractAddress: receipt.contractAddress,
+                  logs: receipt.logs
+              }
+            : "Waiting for confirmation..."
+    };
 
-        const tx = await provider.getTransaction(txHash);
-        const receipt = await provider.getTransactionReceipt(txHash);
+    // ---------------------------------------------------------
+    // 📁 Save to JSON file with the name "<hash>.json"
+    // ---------------------------------------------------------
+    const filename = `${tx.hash}.json`;
 
-        const msg = `
---------------------------------------------------
-TX HASH        : ${txHash}
-FROM           : ${tx.from}
-TO             : ${tx.to}
-VALUE (ETH)    : ${formatEther(tx.value || 0n)}
-GAS USED       : ${receipt?.gasUsed?.toString()}
-STATUS         : ${receipt?.status === 1 ? "SUCCESS" : "FAILED"}
-BLOCK          : ${receipt?.blockNumber}
-TIMESTAMP      : ${block.timestamp}
-INPUT DATA     : ${tx.data}
---------------------------------------------------
-`;
+    fs.writeFileSync(filename, JSON.stringify(result, null, 2));
 
-        console.log(msg);
-        writeToFile("TX", msg);
-    }
-
-    logSuccess("✅ Finished fetching all transaction details.");
+    console.log(`📦 Saved to ${filename}`);
+    return result;
 }
 
-// Run
-fetchTxDetails().catch((err) => logError(err.message));
+// ---------------------------------------------------------
+// 🟢 Call function
+// ---------------------------------------------------------
+getTransactionByHash(
+    "0x0efbec9374781a3f1ec7dd1ddc18d1c3d1d353b0456e941fa17c3ae8a381fafb"
+);
