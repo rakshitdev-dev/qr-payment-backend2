@@ -1,4 +1,9 @@
+require("dotenv").config();
+const { Contract, ZeroAddress } = require("ethers");
 const { BigNumber } = require("bignumber.js");
+const ICO_ABI = require("./icoAbi.json");
+const { evmProviders } = require("./providers");
+const { ICO_ADDRESS_BSC } = process.env;
 
 const getPrice = async (symbol) => {
     try {
@@ -97,19 +102,35 @@ const getAmountsData = async (payToken, amountInUsd) => {
         .multipliedBy(new BigNumber(10).pow(18))
         .toFixed(0); // no decimals
 
-    // For compatibility (you asked)
-    const bnbRequired = baseChain === "bnb" ? rawAmount.toNumber() : 0;
+    // For compatibility (you asked
 
     return {
         usdAmount,
-        bnbRequired,
         paychainAmount,
         payChain,
     };
 }
 
 
+const contract = new Contract(ICO_ADDRESS_BSC, ICO_ABI, evmProviders.bscTestnet);
+
+const getBnbPrice = async () => {
+    try {
+        // calculate USD amount for 1 BNB (1e18)
+        const price = await contract.calculateUSDAmount(
+            ZeroAddress,
+            1n * 10n ** 18n
+        );
+
+        return price; // returns BigInt
+    } catch (err) {
+        console.error("bnbPrice error:", err);
+        throw err;
+    }
+};
+
 module.exports = {
     getPrice,
-    getAmountsData
+    getAmountsData,
+    getBnbPrice
 };

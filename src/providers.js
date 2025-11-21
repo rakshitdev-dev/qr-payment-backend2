@@ -26,6 +26,7 @@ const evmProviders = {
 
     // BSC mainnet
     bsc: new JsonRpcProvider("https://bsc-dataseed.binance.org"),
+    bscTestnet: new JsonRpcProvider(`https://bsc-testnet.infura.io/v3/${infuraKey}`),
 };
 
 

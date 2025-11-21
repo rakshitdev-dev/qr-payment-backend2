@@ -6,7 +6,7 @@ const Session = require("./models/Session");
 const { ethers, formatEther, ZeroAddress } = require("ethers");
 const { deriveDepositAddress } = require("./walletUtils");
 const ICO_ABI = require("./icoAbi.json");
-const { getAmountsData } = require("./priceUtils");
+const { getAmountsData, getBnbPrice } = require("./priceUtils");
 const { generateDepositQrUniversal } = require("./qrUtils");
 const { PublicKey } = require("@solana/web3.js");
 
@@ -79,7 +79,9 @@ app.post("/create-qr-tx", async (req, res) => {
 
 
         // --- 3️⃣ Calculate amounts ---
-        const { usdAmount, paychainAmount, payChain } =
+        const { usdAmount,
+            paychainAmount,
+            payChain, } =
             await getAmountsData(payToken, amountInUsd);
 
 
@@ -98,7 +100,7 @@ app.post("/create-qr-tx", async (req, res) => {
             userAddress,
             saleType,
             payToken,
-            amountUsd: usdAmount,
+            amountUsd: amountInUsd,
             amountPayChain: paychainAmount,
             referrer,
             payChain,
@@ -300,7 +302,6 @@ app.post("/trigger-buy", async (req, res) => {
     try {
         const { sessionId } = req.body;
 
-
         if (!mongoose.isValidObjectId(sessionId))
             return res.status(400).json({ success: false, error: "invalid id" });
 
@@ -317,31 +318,31 @@ app.post("/trigger-buy", async (req, res) => {
                 error: "Buy already executed"
             });
         }
+
         const ico = new ethers.Contract(
             ICO_ADDRESS_BSC,
             ICO_ABI,
             relayerWallet
         );
 
-        // Convert values
+        // Values from session
         const saleType = BigInt(session.saleType);
         const payToken = ZeroAddress;
-        const amount = BigInt(session.amountPayChain); // from DB
         const referrer = session.referrer;
         const user = session.userAddress;
 
-        const overrides =
-            session.payType === "native"
-                ? { value: amount }   // only native requires value
-                : {};
+        const bnbPrice = await getBnbPrice();
 
+        const usdFloat = parseFloat(session.amountUsd);
+        const usdAmount18 = BigInt(Math.round(usdFloat * 1e18));
+        const amount = (usdAmount18 * 10n ** 18n) / bnbPrice;
         const tx = await ico.buy(
             saleType,
             payToken,
             amount,
             referrer,
             user,
-            overrides
+            { value: amount }
         );
 
         console.log("➡ Trigger Buy Tx Sent:", tx.hash);
@@ -354,7 +355,7 @@ app.post("/trigger-buy", async (req, res) => {
 
         return res.json({
             success: true,
-            txHash: receipt.hash
+            txHash: tx.hash
         });
 
     } catch (err) {
@@ -368,6 +369,20 @@ app.post("/trigger-buy", async (req, res) => {
         return res.status(500).json({ success: false, error: err.message });
     }
 });
+
+// app.post("/sweep-assets", async (req, res) => {
+//     try {
+//         const { chain } = req.body;
+//         if (!chain) return res.status(400).json({ success: false, error: "chain required" });
+
+//         const result = await sweepAllAssets(chain);
+
+//         return res.json({ success: true, result });
+//     } catch (err) {
+//         console.error(err);
+//         res.status(500).json({ success: false, error: err.message });
+//     }
+// });
 
 
 /* ============================================================
