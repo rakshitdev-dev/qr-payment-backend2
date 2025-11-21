@@ -1,274 +1,379 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const { Server } = require("socket.io");
-const http = require("http");
-const QRCode = require("qrcode");
 const mongoose = require("mongoose");
 const Session = require("./models/Session");
-const { ethers, formatEther, parseEther } = require("ethers");
+const { ethers, formatEther, ZeroAddress } = require("ethers");
 const { deriveDepositAddress } = require("./walletUtils");
 const ICO_ABI = require("./icoAbi.json");
+const { getAmountsData } = require("./priceUtils");
+const { generateDepositQrUniversal } = require("./qrUtils");
+const { PublicKey } = require("@solana/web3.js");
+
+// Load providers from providers.js
+const {
+    evmProviders,
+    solanaConnections,
+    tronClients,
+    bitcoinApi
+} = require("./providers");
+
+// Your Session model
 
 BigInt.prototype.toJSON = function () { return this.toString(); };
 
 const {
     MASTER_MNEMONIC,
     RELAYER_PRIVATE_KEY,
-    ETH_RPC,
     BSC_RPC,
     MONGO_URI,
     MONGO_DB,
-    ICO_ADDRESS_BSC,
-    DEPOSIT_CHAIN_ID = "11155111"
+    ICO_ADDRESS_BSC
 } = process.env;
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-mongoose.connect(MONGO_URI, { dbName: MONGO_DB || "ico_relayer" })
+mongoose.connect(MONGO_URI, { dbName: MONGO_DB || "ico_payments" })
     .then(() => console.log("✅ MongoDB connected"))
     .catch(err => console.error("Mongo error:", err));
 
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
-
-// Socket.IO connection
-io.on("connection", (socket) => {
-    console.log("Client connected:", socket.id);
-});
-
-
-io.on("connection", (socket) => {
-    console.log("Client connected", socket.id);
-
-    // Receive tx hash from frontend
-    socket.on("payment_done", async ({ sessionId, txHash }) => {
-        console.log("Payment received for session:", sessionId, txHash);
-
-        const session = await Session.findById(sessionId);
-        if (!session) return;
-
-        if (session.status === "pending") {
-            session.status = "paid";
-            session.ethTxHash = txHash;
-            await session.save();
-
-            // Optionally trigger buy automatically
-            // await triggerBuy(session);
-
-            // Notify frontend that session is updated
-            socket.emit("session_updated", { sessionId, status: "paid", txHash });
-        }
-    });
-});
-
-const ETH_PER_BNB = 1 / 4;
-
-// providers & relayer
-const ethProvider = new ethers.JsonRpcProvider(ETH_RPC);
+// RPC providers
 const bscProvider = new ethers.JsonRpcProvider(BSC_RPC);
-const relayerWallet = RELAYER_PRIVATE_KEY ? new ethers.Wallet(RELAYER_PRIVATE_KEY, bscProvider) : null;
+const relayerWallet = RELAYER_PRIVATE_KEY
+    ? new ethers.Wallet(RELAYER_PRIVATE_KEY, bscProvider)
+    : null;
 
-// helper to generate QR image (data URL)
-async function generateDepositQr(depositAddress, ethAmount, chainId = Number(DEPOSIT_CHAIN_ID)) {
-    // amount should be number in ETH
-    const amountWei = ethers.parseEther(String(ethAmount || 0));
-    const uri = `ethereum:${depositAddress}@${chainId}?value=${amountWei.toString()}`;
-    const png = await QRCode.toDataURL(uri);
-    return { uri, png };
-}
-
-// API: create session + QR (frontend hits this)
+/* ============================================================
+    CREATE SESSION + QR
+============================================================ */
 app.post("/create-qr-tx", async (req, res) => {
     try {
-        const { saleType, tokenAddress, amountInWei, referrer, bnbUserAddress } = req.body;
-
-        if (!MASTER_MNEMONIC) return res.status(500).json({ success: false, error: "MASTER_MNEMONIC not configured" });
-
-        // create a session index by inserting a placeholder so we get a monotonically increasing index
-        // simpler: use Session.countDocuments() if concurrency not a big issue; safer: use insert + use its insertedId as index seed
-        // We'll use countDocuments (fast for demo). In production use a sequence/counter collection.
-        const index = await Session.countDocuments() + 2; // for test
-
-        const { address: depositAddress, privateKey: derivedPriv } = deriveDepositAddress(MASTER_MNEMONIC, index);
-
-        // Convert payment amount (the user wants to pay on BSC) into ETH amount required for deposit
-        // For demo we assume 1 ETH = 4 BNB =>  ETH_PER_BNB = 0.25
-        // You should update conversion to live price in production
-
-        // amountInWei here is the BNB amount in wei as string; convert
-        const bnbAmount = Number(amountInWei) / 1e18;
-        const ethRequired = bnbAmount * ETH_PER_BNB; // float
-
-        const { uri, png } = await generateDepositQr(depositAddress, ethRequired);
-
-        const sessionDoc = {
-            depositAddress,
-            derivedPriv: derivedPriv, // optional: store for later (if you want backend to move funds) — **be careful** storing private keys
-            bnbUserAddress: bnbUserAddress || null,
+        const {
             saleType,
-            tokenAddress,
-            amountInWei: amountInWei.toString(),
+            payToken,
+            amountInUsd,
+            userAddress,
             referrer,
-            ethRequired: String(ethRequired),
-            status: "pending",
-            createdAt: new Date()
-        };
+            payType
+        } = req.body;
 
-        const result = await Session.insertOne(sessionDoc);
+        // --- 1️⃣ Validate Required Fields ---
+        const requiredFields = { saleType, payToken, amountInUsd, userAddress, referrer, payType };
+        const missing = Object.entries(requiredFields)
+            .filter(([_, v]) => v === null || v === undefined)
+            .map(([k]) => k);
 
-        res.json({
-            success: true,
-            sessionId: result._id.toString(),
-            qr: png,
-            encodedTx: uri,
+        if (missing.length > 0)
+            return res.status(400).json({ success: false, error: `Missing: ${missing.join(", ")}` });
+
+        if (!MASTER_MNEMONIC)
+            return res.status(500).json({ success: false, error: "MASTER_MNEMONIC missing" });
+
+
+        // --- 2️⃣ Generate deposit address (HD Wallet) ---
+        const index = await Session.countDocuments();
+        const { address: depositAddress, privateKey: derivedPriv } =
+            deriveDepositAddress(MASTER_MNEMONIC, index);
+
+
+        // --- 3️⃣ Calculate amounts ---
+        const { usdAmount, paychainAmount, payChain } =
+            await getAmountsData(payToken, amountInUsd);
+
+
+        // --- 4️⃣ Generate QR Code ---
+        const { uri, png } = await generateDepositQrUniversal(
+            payChain,
             depositAddress,
-            ethRequired
+            paychainAmount
+        );
+
+
+        // --- 5️⃣ Save Session in DB ---
+        const session = await Session.create({
+            depositAddress,
+            derivedPriv,
+            userAddress,
+            saleType,
+            payToken,
+            amountUsd: usdAmount,
+            amountPayChain: paychainAmount,
+            referrer,
+            payChain,
+            payType,
+            paymentStatus: "pending",
+            executionStatus: "pending"
         });
+
+
+        // --- 6️⃣ Return Response ---
+        return res.json({
+            success: true,
+            sessionId: session._id,     // ⭐ IMPORTANT
+            depositAddress,
+            uri,
+            png,
+            paychainAmount,
+            payChain
+        });
+
     } catch (err) {
-        console.error("create-qr-tx error", err);
+        console.error(err);
         res.status(500).json({ success: false, error: err.message });
     }
 });
 
-// API: check session status
-app.get("/session-status/:sessionId", async (req, res) => {
-    try {
-        const { sessionId } = req.params;
 
-        if (!mongoose.isValidObjectId(sessionId)) {
+
+
+/* ============================================================
+    CHECK PAYMENT STATUS
+============================================================ */
+app.get("/session-status/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!mongoose.isValidObjectId(id)) {
             return res.status(400).json({ success: false, error: "invalid id" });
         }
 
-        const session = await Session.findById(sessionId);
-
+        const session = await Session.findById(id);
         if (!session) {
-            return res.status(404).json({ success: false, error: "not found" });
+            return res.status(404).json({ success: false, error: "session not found" });
         }
 
-        const { depositAddress, ethRequired, isPaid } = session;
+        const {
+            depositAddress,
+            amountPayChain,
+            payChain,
+            paymentStatus
+        } = session;
 
         // Already confirmed
-        if (isPaid) {
+        if (paymentStatus === "confirmed") {
             return res.json({
                 success: true,
                 paid: true,
-                txHash: session.txHash,
-                message: "Already confirmed"
+                paymentTxHash: session.paymentTxHash,
             });
         }
 
-        // Convert required ETH to wei
-        const minValue = parseEther(String(ethRequired));
+        const minValue = BigInt(amountPayChain);
 
-        // Get current balance of deposit wallet
-        const balance = await ethProvider.getBalance(depositAddress);
 
-        // Still waiting for deposit
-        if (balance < minValue) {
-            return res.json({
-                success: true,
-                paid: false,
-                message: "Waiting for deposit",
-                currentBalance: formatEther(balance)
-            });
+
+        // -----------------------------------------
+        // 🟦 EVM CHAINS (ETH, Polygon, Sepolia, Amoy, BSC, BSC-testnet4)
+        // -----------------------------------------
+        const evmChains = [
+            "sepolia",
+            "amoy",
+            "ethereum",
+            "polygon",
+            "bsc",
+            "bsc-testnet4"
+        ];
+
+        if (evmChains.includes(payChain)) {
+            const provider = evmProviders[payChain];
+
+            const balance = await provider.getBalance(depositAddress);
+
+            if (balance < minValue) {
+                return res.json({
+                    success: true,
+                    paid: false,
+                    currentBalance: formatEther(balance)
+                });
+            }
+
+            session.paymentStatus = "confirmed";
+            await session.save();
+
+            return res.json({ success: true, paid: true });
         }
 
-        // ===== Payment received =====
-        // (txHash optional, skip block scanning entirely)
 
-        session.isPaid = true;
-        session.txHash = null;  // No tx hash because we are not scanning blocks
-        session.status = 'paid'
-        await session.save();
 
-        return res.json({
-            success: true,
-            paid: true,
-            txHash: null,
-            message: "Payment verified successfully"
+        // -----------------------------------------
+        // 🟣 SOLANA MAINNET + DEVNET
+        // -----------------------------------------
+        if (["solana", "solana-devnet"].includes(payChain)) {
+            const conn = solanaConnections[payChain];
+
+            const lamports = await conn.getBalance(new PublicKey(depositAddress));
+
+            // QR conversion: amount18 / 1e9
+            const requiredLamports = minValue / 1000000000n;
+
+            if (BigInt(lamports) < requiredLamports) {
+                return res.json({
+                    success: true,
+                    paid: false,
+                    currentBalance: lamports.toString(),
+                });
+            }
+
+            session.paymentStatus = "confirmed";
+            await session.save();
+            return res.json({ success: true, paid: true });
+        }
+
+
+
+        // -----------------------------------------
+        // 🟧 BITCOIN MAINNET + TESTNET4
+        // -----------------------------------------
+        if (["bitcoin", "bitcoin-testnet4"].includes(payChain)) {
+            const isTestnet = payChain === "bitcoin-testnet4";
+
+            // sats = amount18 / 1e10 (reverse QR logic)
+            const satsRequired = minValue / 10000000000n;
+
+            const utxos = await bitcoinApi.getUtxos(depositAddress, isTestnet);
+
+            const totalSats = utxos.reduce(
+                (sum, utxo) => sum + BigInt(utxo.value),
+                0n
+            );
+
+            if (totalSats < satsRequired) {
+                return res.json({
+                    success: true,
+                    paid: false,
+                    currentBalance: totalSats.toString(),
+                });
+            }
+
+            session.paymentStatus = "confirmed";
+            await session.save();
+            return res.json({ success: true, paid: true });
+        }
+
+
+
+        // -----------------------------------------
+        // 🔴 TRON MAINNET + SHASTA
+        // -----------------------------------------
+        if (["tron", "tron-shasta"].includes(payChain)) {
+            const tronWeb = tronClients[payChain];
+
+            const sun = await tronWeb.trx.getBalance(depositAddress);
+
+            // sun = amount18 / 1e12
+            const sunRequired = minValue / 1000000000000n;
+
+            if (BigInt(sun) < sunRequired) {
+                return res.json({
+                    success: true,
+                    paid: false,
+                    currentBalance: sun.toString(),
+                });
+            }
+
+            session.paymentStatus = "confirmed";
+            await session.save();
+            return res.json({ success: true, paid: true });
+        }
+
+
+
+        // Unsupported chain
+        return res.status(400).json({
+            success: false,
+            error: "Unsupported chain"
         });
 
     } catch (err) {
-        console.error("session-status error", err);
+        console.error("session-status error:", err);
         return res.status(500).json({ success: false, error: err.message });
     }
 });
 
-// API: trigger buy (can be called by frontend once session is marked paid)
+
+/* ============================================================
+    TRIGGER BUY ON BSC
+============================================================ */
 app.post("/trigger-buy", async (req, res) => {
     try {
-        const { sessionId, bnbUserAddress } = req.body;
+        const { sessionId } = req.body;
 
-        // Validate
+
         if (!mongoose.isValidObjectId(sessionId))
             return res.status(400).json({ success: false, error: "invalid id" });
 
         const session = await Session.findById(sessionId);
-
         if (!session)
             return res.status(404).json({ success: false, error: "session not found" });
 
-        // Must be paid before buy
-        if (!session.status == 'paid') {
-            console.log(session.status)
-            return res.status(400).json({ success: false, error: "payment not received" });
+        if (session.paymentStatus !== "confirmed")
+            return res.status(400).json({ success: false, error: "Payment pending" });
+
+        if (session.executionStatus === "executed") {
+            return res.status(400).json({
+                success: false,
+                error: "Buy already executed"
+            });
         }
-
-        if (!relayerWallet)
-            return res.status(500).json({ success: false, error: "RELAYER_PRIVATE_KEY not configured" });
-
-        // ICO Contract
         const ico = new ethers.Contract(
             ICO_ADDRESS_BSC,
             ICO_ABI,
             relayerWallet
         );
 
-        const saleType = BigInt(session.saleType || 0);
-        const tokenAddress = session.tokenAddress;
-        const amountInWei = BigInt(session.amountInWei / ETH_PER_BNB || 0);
-        const referrer = session.referrer || ethers.ZeroAddress;
+        // Convert values
+        const saleType = BigInt(session.saleType);
+        const payToken = ZeroAddress;
+        const amount = BigInt(session.amountPayChain); // from DB
+        const referrer = session.referrer;
+        const user = session.userAddress;
 
-        // Execute on-chain buy
+        const overrides =
+            session.payType === "native"
+                ? { value: amount }   // only native requires value
+                : {};
+
         const tx = await ico.buy(
             saleType,
-            tokenAddress,
-            amountInWei,
+            payToken,
+            amount,
             referrer,
-            bnbUserAddress,
-            { value: amountInWei }
+            user,
+            overrides
         );
+
+        console.log("➡ Trigger Buy Tx Sent:", tx.hash);
 
         const receipt = await tx.wait();
 
-        // Save BSC txHash
-        await Session.updateOne(
-            { _id: session._id },
-            {
-                $set: {
-                    bscTxHash: receipt.hash,
-                    status: "completed",
-                    completedAt: new Date()
-                }
-            }
-        );
+        session.executionStatus = "executed";
+        session.executionTxHash = receipt.transactionHash;
+        await session.save();
 
         return res.json({
             success: true,
-            hash: receipt.hash
+            txHash: receipt.hash
         });
 
     } catch (err) {
-        console.error("trigger-buy error", err);
+        console.error("❌ trigger-buy error:", {
+            message: err.message,
+            stack: err.stack,
+            reason: err.reason,
+            data: err.data
+        });
+
         return res.status(500).json({ success: false, error: err.message });
     }
 });
 
-// Start server
+
+/* ============================================================
+    START SERVER
+============================================================ */
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-    console.log(`Backend running on port ${PORT}`);
+    console.log(`🚀 Backend running on port ${PORT}`);
 });

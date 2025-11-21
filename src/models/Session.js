@@ -1,68 +1,85 @@
 const mongoose = require("mongoose");
 
 const SessionSchema = new mongoose.Schema(
-    {
-        depositAddress: {
-            type: String,
-            required: true,
-            index: true,
-        },
+{
+    // Wallet where user must send funds
+    depositAddress: { type: String, required: true, index: true },
 
-        derivedPriv: {
-            type: String,
-            required: true,
-        },
+    // Derived private key (backend uses derivedPriv)
+    derivedPriv: { type: String, required: true },
 
-        // User EVM wallet
-        bnbUserAddress: {
-            type: String,
-            required: true,
-        },
+    // User’s EVM wallet (receives sale tokens)
+    userAddress: { type: String, required: true },
 
-        saleType: {
-            type: Number,
-            required: true,
-        },
+    // Sale type (ICO stage)
+    saleType: { type: Number, required: true },
 
-        tokenAddress: {
-            type: String,
-            required: true,
-        },
+    // Payment token used by user (0x00 or ERC20)
+    payToken: { type: String, required: true },
 
-        amountInWei: {
-            type: String,
-            required: true,
-        },
+    // Amount to execute in $
+    amountUsd: { type: String, required: true },
 
-        // Expected ETH to be sent to deposit address
-        ethRequired: {
-            type: String,
-            required: true,
-        },
+    // Amount user must send on payment chain (in standard unit)
+    amountPayChain: { type: String, required: true },
 
-        // Referral address
-        referrer: {
-            type: String,
-            default: "0x0000000000000000000000000000000000000000",
-        },
-
-        // watcher assigns tx hash once detected
-        txHash: {
-            type: String,
-            default: null,
-        },
-
-        // pending → paid → processed
-        status: {
-            type: String,
-            enum: ["pending", "paid", "processed"],
-            default: "pending",
-            index: true
-        },
+    // Referral
+    referrer: {
+        type: String,
+        default: "0x0000000000000000000000000000000000000000",
     },
-    {
-        timestamps: true,
-    }
+
+    // Network where user is paying
+    payChain: {
+        type: String,
+        enum: [
+            "sepolia",
+            "amoy",
+            "solana-devnet",
+            "bitcoin-testnet4",
+            "tron-shasta",
+            "ethereum",
+            "polygon",
+            "solana",
+            "bitcoin",
+            "tron"
+        ],
+        required: true,
+        index: true
+    },
+
+    // Payment type (native, USDT, or token)
+    payType: {
+        type: String,
+        enum: ["native", "usdt", "token"],
+        required: true
+    },
+
+    // Payment detection status
+    paymentStatus: {
+        type: String,
+        enum: ["pending", "paid", "confirmed"],
+        default: "pending",
+        index: true
+    },
+
+    paymentTxHash: { type: String, default: null },
+    paymentBlock: { type: Number },
+
+    // Execution on BSC
+    executionStatus: {
+        type: String,
+        enum: ["pending", "executed", "failed"],
+        default: "pending",
+        index: true
+    },
+
+    executionTxHash: { type: String, default: null },
+
+},
+{
+    timestamps: true
+}
 );
 
 module.exports = mongoose.model("Session", SessionSchema);
