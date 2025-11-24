@@ -7,7 +7,7 @@ const { ethers, formatEther, ZeroAddress } = require("ethers");
 const { deriveDepositAddress } = require("./walletUtils");
 const ICO_ABI = require("./icoAbi.json");
 const { getAmountsData, getBnbPrice } = require("./priceUtils");
-const { generateDepositQrUniversal } = require("./qrUtils");
+const { generateDepositQrUniversal, payTokenMap } = require("./qrUtils");
 const { PublicKey } = require("@solana/web3.js");
 
 // Load providers from providers.js
@@ -17,6 +17,7 @@ const {
     tronClients,
     bitcoinApi
 } = require("./providers");
+const { Contract } = require("ethers");
 
 // Your Session model
 
@@ -56,11 +57,17 @@ app.post("/create-qr-tx", async (req, res) => {
             amountInUsd,
             userAddress,
             referrer,
-            payType
         } = req.body;
-
+        // console.log({
+        //             saleType,
+        //             payToken,
+        //             amountInUsd,
+        //             userAddress,
+        //             referrer,
+        //             payType
+        //         })
         // --- 1️⃣ Validate Required Fields ---
-        const requiredFields = { saleType, payToken, amountInUsd, userAddress, referrer, payType };
+        const requiredFields = { saleType, payToken, amountInUsd, userAddress, referrer };
         const missing = Object.entries(requiredFields)
             .filter(([_, v]) => v === null || v === undefined)
             .map(([k]) => k);
@@ -79,17 +86,19 @@ app.post("/create-qr-tx", async (req, res) => {
 
 
         // --- 3️⃣ Calculate amounts ---
-        const { usdAmount,
+        const {
             paychainAmount,
-            payChain, } =
-            await getAmountsData(payToken, amountInUsd);
+            payChain,
+            payType
+        } = await getAmountsData(payToken, amountInUsd);
 
 
         // --- 4️⃣ Generate QR Code ---
         const { uri, png } = await generateDepositQrUniversal(
             payChain,
             depositAddress,
-            paychainAmount
+            paychainAmount,
+            payType
         );
 
 
@@ -150,21 +159,23 @@ app.get("/session-status/:id", async (req, res) => {
             depositAddress,
             amountPayChain,
             payChain,
-            paymentStatus
+            paymentStatus,
+            executionStatus
         } = session;
 
         // Already confirmed
+        if (executionStatus === "executed") {
+            throw new Error("Session already executed");
+        }
+
         if (paymentStatus === "confirmed") {
             return res.json({
                 success: true,
-                paid: true,
-                paymentTxHash: session.paymentTxHash,
+                paid: true
             });
         }
 
         const minValue = BigInt(amountPayChain);
-
-
 
         // -----------------------------------------
         // 🟦 EVM CHAINS (ETH, Polygon, Sepolia, Amoy, BSC, BSC-testnet4)
@@ -175,29 +186,68 @@ app.get("/session-status/:id", async (req, res) => {
             "ethereum",
             "polygon",
             "bsc",
-            "bsc-testnet4"
+            "bsc-testnet"
         ];
 
         if (evmChains.includes(payChain)) {
             const provider = evmProviders[payChain];
 
-            const balance = await provider.getBalance(depositAddress);
+            if (session.payType === "native") {
+                // -------------------------
+                // 🔹 Native coin check
+                // -------------------------
+                const balance = await provider.getBalance(depositAddress);
 
-            if (balance < minValue) {
-                return res.json({
-                    success: true,
-                    paid: false,
-                    currentBalance: formatEther(balance)
-                });
+                if (balance < minValue) {
+                    return res.json({
+                        success: true,
+                        paid: false,
+                        currentBalance: ethers.formatEther(balance)
+                    });
+                }
+
+                session.paymentStatus = "confirmed";
+                await session.save();
+
+                return res.json({ success: true, paid: true });
             }
 
-            session.paymentStatus = "confirmed";
-            await session.save();
+            if (session.payType === "usdt") {
+                // -------------------------
+                // 🔹 USDT (or any ERC20 token) check
+                // -------------------------
+                const usdtAddress = payTokenMap[payChain];          // map chain → token
+                const usdtAbi = [
+                    "function balanceOf(address) view returns (uint256)",
+                    "function decimals() view returns (uint8)"
+                ];
 
-            return res.json({ success: true, paid: true });
+                const token = new Contract(usdtAddress, usdtAbi, provider);
+
+                const balance = await token.balanceOf(depositAddress);
+                const decimals = await token.decimals();              // usually 6 for USDT
+
+                // Convert minValue (USD 18 decimals) → token decimals
+                const minTokenValue =
+                    decimals === 18
+                        ? minValue
+                        : minValue / 10n ** (18n - BigInt(decimals));
+
+                if (balance < minTokenValue) {
+                    return res.json({
+                        success: true,
+                        paid: false,
+                        currentBalance:
+                            Number(balance) / 10 ** decimals
+                    });
+                }
+
+                session.paymentStatus = "confirmed";
+                await session.save();
+
+                return res.json({ success: true, paid: true });
+            }
         }
-
-
 
         // -----------------------------------------
         // 🟣 SOLANA MAINNET + DEVNET
@@ -222,8 +272,6 @@ app.get("/session-status/:id", async (req, res) => {
             await session.save();
             return res.json({ success: true, paid: true });
         }
-
-
 
         // -----------------------------------------
         // 🟧 BITCOIN MAINNET + TESTNET4
@@ -254,8 +302,6 @@ app.get("/session-status/:id", async (req, res) => {
             return res.json({ success: true, paid: true });
         }
 
-
-
         // -----------------------------------------
         // 🔴 TRON MAINNET + SHASTA
         // -----------------------------------------
@@ -279,8 +325,6 @@ app.get("/session-status/:id", async (req, res) => {
             await session.save();
             return res.json({ success: true, paid: true });
         }
-
-
 
         // Unsupported chain
         return res.status(400).json({
@@ -348,9 +392,9 @@ app.post("/trigger-buy", async (req, res) => {
         console.log("➡ Trigger Buy Tx Sent:", tx.hash);
 
         const receipt = await tx.wait();
-
+        console.log(receipt)
         session.executionStatus = "executed";
-        session.executionTxHash = receipt.transactionHash;
+        session.executionTxHash = receipt.hash;
         await session.save();
 
         return res.json({
@@ -369,21 +413,6 @@ app.post("/trigger-buy", async (req, res) => {
         return res.status(500).json({ success: false, error: err.message });
     }
 });
-
-// app.post("/sweep-assets", async (req, res) => {
-//     try {
-//         const { chain } = req.body;
-//         if (!chain) return res.status(400).json({ success: false, error: "chain required" });
-
-//         const result = await sweepAllAssets(chain);
-
-//         return res.json({ success: true, result });
-//     } catch (err) {
-//         console.error(err);
-//         res.status(500).json({ success: false, error: err.message });
-//     }
-// });
-
 
 /* ============================================================
     START SERVER

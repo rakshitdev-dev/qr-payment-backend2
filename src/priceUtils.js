@@ -58,7 +58,6 @@ const mapChainToBinanceSymbol = (chain) => {
 
 // MAIN FUNCTION
 const getAmountsData = async (payToken, amountInUsd) => {
-    console.log(payToken, amountInUsd)
     const usdAmount = Number(amountInUsd);
     if (isNaN(usdAmount) || usdAmount <= 0) {
         throw new Error("Invalid USD amount");
@@ -67,7 +66,7 @@ const getAmountsData = async (payToken, amountInUsd) => {
     // Detect if payment token is USDT (erc20)
     const isUSDT = payToken.endsWith("-usdt");
     const baseChain = isUSDT ? payToken.replace("-usdt", "") : payToken;
-
+    const payType = isUSDT ? "usdt" : "native"
     // Normalize chain name for your return value
     const payChain = baseChain;
 
@@ -105,9 +104,9 @@ const getAmountsData = async (payToken, amountInUsd) => {
     // For compatibility (you asked
 
     return {
-        usdAmount,
         paychainAmount,
         payChain,
+        payType
     };
 }
 

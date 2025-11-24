@@ -63,7 +63,6 @@ const SessionSchema = new mongoose.Schema(
         index: true
     },
 
-    paymentTxHash: { type: String, default: null },
     paymentBlock: { type: Number },
 
     // Execution on BSC
