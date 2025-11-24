@@ -3,13 +3,12 @@ const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
 const Session = require("./models/Session");
-const { ethers, formatEther, ZeroAddress } = require("ethers");
+const { ethers, ZeroAddress } = require("ethers");
 const { deriveDepositAddress } = require("./walletUtils");
 const ICO_ABI = require("./icoAbi.json");
 const { getAmountsData, getBnbPrice } = require("./priceUtils");
 const { generateDepositQrUniversal, payTokenMap } = require("./qrUtils");
 const { PublicKey } = require("@solana/web3.js");
-
 // Load providers from providers.js
 const {
     evmProviders,
@@ -64,7 +63,6 @@ app.post("/create-qr-tx", async (req, res) => {
         //             amountInUsd,
         //             userAddress,
         //             referrer,
-        //             payType
         //         })
         // --- 1️⃣ Validate Required Fields ---
         const requiredFields = { saleType, payToken, amountInUsd, userAddress, referrer };
@@ -81,8 +79,6 @@ app.post("/create-qr-tx", async (req, res) => {
 
         // --- 2️⃣ Generate deposit address (HD Wallet) ---
         const index = await Session.countDocuments();
-        const { address: depositAddress, privateKey: derivedPriv } =
-            deriveDepositAddress(MASTER_MNEMONIC, index);
 
 
         // --- 3️⃣ Calculate amounts ---
@@ -92,6 +88,10 @@ app.post("/create-qr-tx", async (req, res) => {
             payType
         } = await getAmountsData(payToken, amountInUsd);
 
+        const {
+            address: depositAddress,
+            privateKey: derivedPriv,
+        } = deriveDepositAddress(MASTER_MNEMONIC, index, payChain);
 
         // --- 4️⃣ Generate QR Code ---
         const { uri, png } = await generateDepositQrUniversal(
@@ -100,7 +100,6 @@ app.post("/create-qr-tx", async (req, res) => {
             paychainAmount,
             payType
         );
-
 
         // --- 5️⃣ Save Session in DB ---
         const session = await Session.create({
@@ -127,7 +126,8 @@ app.post("/create-qr-tx", async (req, res) => {
             uri,
             png,
             paychainAmount,
-            payChain
+            payChain,
+            payType
         });
 
     } catch (err) {
@@ -257,9 +257,8 @@ app.get("/session-status/:id", async (req, res) => {
 
             const lamports = await conn.getBalance(new PublicKey(depositAddress));
 
-            // QR conversion: amount18 / 1e9
-            const requiredLamports = minValue / 1000000000n;
-
+            const requiredLamports = parseInt(minValue);
+ 
             if (BigInt(lamports) < requiredLamports) {
                 return res.json({
                     success: true,
@@ -389,17 +388,14 @@ app.post("/trigger-buy", async (req, res) => {
             { value: amount }
         );
 
-        console.log("➡ Trigger Buy Tx Sent:", tx.hash);
-
         const receipt = await tx.wait();
-        console.log(receipt)
         session.executionStatus = "executed";
         session.executionTxHash = receipt.hash;
         await session.save();
 
         return res.json({
             success: true,
-            txHash: tx.hash
+            txHash: receipt.hash
         });
 
     } catch (err) {

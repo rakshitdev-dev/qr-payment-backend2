@@ -1,15 +1,23 @@
 const QRCode = require("qrcode");
 
-function buildEvmQrUri(chain, address, amountWei) {
-    const chainIdMap = {
-        sepolia: 11155111,
-        amoy: 80002,
-        ethereum: 1,
-        polygon: 137,
-    };
+const nativeDecimalsMap = {
+    'sepolia': 18,
+    'ethereum': 18,
 
-    const chainId = chainIdMap[chain];
-    return `ethereum:${address}@${chainId}?value=${amountWei}`;
+    'amoy': 18,
+    'polygon': 18,
+
+    'bnb': 18,
+    'chapel': 18,
+
+    'solana': 9,
+    "solana-devnet": 9,
+
+    'bitcoin': 8,
+    "bitcoin-testnet4": 8,
+
+    'tron': 6,
+    "tron-shasta": 6,
 }
 
 const chainIdMap = {
@@ -17,30 +25,53 @@ const chainIdMap = {
     amoy: 80002,
     ethereum: 1,
     polygon: 137,
+    solana: 'mainnet-beta',
+    "solana-devnet": 'devnet',
+    bitcoin: 0,
+    "bitcoin-testnet4": 1,
+    tron: 1,
+    "tron-shasta": 2,
 };
 
 const payTokenMap = {
     sepolia: "0x2dBb8400F6EBCEEA0D09453B8E0cD0aAdB613DbF",
     amoy: "0xEF5e41CbA24d1Bd6E86E58FD37bcab9ee28fc4e2",
     ethereum: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
-    polygon:  "0xc2132D05D31c914a87C6611C10748AaCBfF7c8F9",
+    polygon: "0xc2132D05D31c914a87C6611C10748AaCBfF7c8F9",
+    "solana-devnet": null,
+    solana: null,
+    tron: null,
+    "tron-shasta": null,
+    bitcoin: null,
+    "bitcoin-testnet4": null
 };
 
-function buildEvmTokenQrUri(chain, depositAddress, amount) {
-  const chainId = chainIdMap[chain];
-  if (!chainId) throw new Error(`Unsupported chain: ${chain}`);
-
-  const tokenAddress = payTokenMap[chain];
-  if (!tokenAddress) throw new Error(`USDT contract not defined for chain: ${chain}`);
-
-  // EIP-681 format for ERC20 token transfer
-  return `ethereum:${tokenAddress}@${chainId}/transfer?address=${depositAddress}&uint256=${amount}`;
+function buildEvmQrUri(chain, address, amount) {
+    const chainId = chainIdMap[chain];
+    return `ethereum:${address}@${chainId}?value=${amount}`;
 }
 
-function buildSolanaQrUri(address, amount18, tokenSymbol = "SOL") {
+function buildEvmTokenQrUri(chain, depositAddress, amount) {
+    const chainId = chainIdMap[chain];
+    if (!chainId) throw new Error(`Unsupported chain: ${chain}`);
+
+    const tokenAddress = payTokenMap[chain];
+    if (!tokenAddress) throw new Error(`USDT contract not defined for chain: ${chain}`);
+
+    // EIP-681 format for ERC20 token transfer
+    return `ethereum:${tokenAddress}@${chainId}/transfer?address=${depositAddress}&uint256=${amount}`;
+}
+
+function buildSolanaQrUri(address, amount, network) {
+    const decimal = nativeDecimalsMap.solana;
+    return `solana:${address}?amount=${parseInt(amount) / (10 ** decimal)}&token=SOL&network=${chainIdMap[network]}`;
+}
+
+function buildSolanaTokenQrUri(address, amount, network) {
     // Convert 18 decimals → 9 decimals for SOL or SPL tokens
-    const lamports = BigInt(amount18) / BigInt(1e9);
-    return `solana:${address}?amount=${lamports}&token=${tokenSymbol}`;
+
+    // return `solana:${address}?amount=${lamports}&token=${'SOL'}`;
+    return `solana:${address}?amount=${amount}&spl-token=4MTYjRXeFHXN5pCMzPbyXNV2XQ9yEr3hRuks9wL6TwXS&network=${chainIdMap[network]}`;
 }
 
 function buildBitcoinQrUri(address, amount18) {
@@ -75,9 +106,9 @@ async function generateDepositQrUniversal(payChain, depositAddress, paychainAmou
         case "solana":
         case "solana-devnet":
             if (payType === "native") {
-                uri = buildSolanaQrUri(depositAddress, paychainAmount, "SOL");
+                uri = buildSolanaQrUri(depositAddress, paychainAmount, payChain);
             } else if (payType.toLowerCase() === "usdt") {
-                uri = buildSolanaQrUri(depositAddress, paychainAmount, "USDT");
+                uri = buildSolanaTokenQrUri(depositAddress, paychainAmount, payChain);
             } else {
                 throw new Error(`Unsupported payType "${payType}" for ${payChain}`);
             }
