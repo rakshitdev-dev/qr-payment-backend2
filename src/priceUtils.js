@@ -1,10 +1,8 @@
-require("dotenv").config();
 const { Contract, ZeroAddress } = require("ethers");
 const { BigNumber } = require("bignumber.js");
-const ICO_ABI = require("./icoAbi.json");
+const icoAbi = require("./icoAbi.json");
 const { evmProviders } = require("./providers");
 const { payTokenMap } = require("./qrUtils");
-const { ICO_ADDRESS_BSC } = process.env;
 const { Connection, PublicKey } = require("@solana/web3.js");
 const { getMint } = require("@solana/spl-token");
 const TronWeb = require("tronweb");
@@ -182,20 +180,19 @@ const getAmountsData = async (payToken, amountInUsd) => {
         .multipliedBy(new BigNumber(10).pow(decimals))
         .toFixed(0); // no decimals
 
-    // For compatibility (you asked
-
     return {
         paychainAmount,
         payChain,
-        payType
+        payType,
+        decimals
     };
 }
 
 // -------- BNB PRICE USING CONTRACT ORACLE --------
 
-const getBnbPrice = async () => {
+const getBnbPrice = async (ico_address, provider) => {
     try {
-        const icoContract = new Contract(ICO_ADDRESS_BSC, ICO_ABI, evmProviders.bscTestnet);
+        const icoContract = new Contract(ico_address, icoAbi, provider);
         const price = await icoContract.calculateUSDAmount(
             ZeroAddress,
             1n * 10n ** 18n
@@ -212,5 +209,6 @@ module.exports = {
     getPrice,
     getAmountsData,
     getBnbPrice,
+    getTokenDecimals,
     nativeDecimalsMap,
 };

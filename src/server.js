@@ -17,6 +17,9 @@ const {
     bitcoinApi
 } = require("./providers");
 const { Contract } = require("ethers");
+const { getAssociatedTokenAddress, getAccount } = require("@solana/spl-token");
+const { Wallet } = require("ethers");
+const { JsonRpcProvider } = require("ethers");
 
 // Your Session model
 
@@ -24,11 +27,14 @@ BigInt.prototype.toJSON = function () { return this.toString(); };
 
 const {
     MASTER_MNEMONIC,
-    RELAYER_PRIVATE_KEY,
-    BSC_RPC,
+    RELAYER_PRIVATE_KEY_TESTNET,
+    BSC_RPC_TESTNET,
+    ICO_ADDRESS_BSC_TESTNET,
+    RELAYER_PRIVATE_KEY_MAINNET,
+    BSC_RPC_MAINNET,
+    ICO_ADDRESS_BSC_MAINNET,
     MONGO_URI,
     MONGO_DB,
-    ICO_ADDRESS_BSC
 } = process.env;
 
 const app = express();
@@ -40,9 +46,14 @@ mongoose.connect(MONGO_URI, { dbName: MONGO_DB || "ico_payments" })
     .catch(err => console.error("Mongo error:", err));
 
 // RPC providers
-const bscProvider = new ethers.JsonRpcProvider(BSC_RPC);
-const relayerWallet = RELAYER_PRIVATE_KEY
-    ? new ethers.Wallet(RELAYER_PRIVATE_KEY, bscProvider)
+const bscProviderTestnet = new JsonRpcProvider(BSC_RPC_TESTNET);
+const relayerWalletTestnet = RELAYER_PRIVATE_KEY_TESTNET
+    ? new Wallet(RELAYER_PRIVATE_KEY_TESTNET, bscProviderTestnet)
+    : null;
+
+const bscProviderMainnet = new JsonRpcProvider(BSC_RPC_MAINNET);
+const relayerWalletMainnet = RELAYER_PRIVATE_KEY_MAINNET
+    ? new Wallet(RELAYER_PRIVATE_KEY_MAINNET, bscProviderMainnet)
     : null;
 
 /* ============================================================
@@ -56,6 +67,7 @@ app.post("/create-qr-tx", async (req, res) => {
             amountInUsd,
             userAddress,
             referrer,
+            testnet
         } = req.body;
         // console.log({
         //             saleType,
@@ -85,7 +97,8 @@ app.post("/create-qr-tx", async (req, res) => {
         const {
             paychainAmount,
             payChain,
-            payType
+            payType,
+            decimals
         } = await getAmountsData(payToken, amountInUsd);
 
         const {
@@ -114,7 +127,8 @@ app.post("/create-qr-tx", async (req, res) => {
             payChain,
             payType,
             paymentStatus: "pending",
-            executionStatus: "pending"
+            executionStatus: "pending",
+            testnet
         });
 
 
@@ -127,7 +141,8 @@ app.post("/create-qr-tx", async (req, res) => {
             png,
             paychainAmount,
             payChain,
-            payType
+            payType,
+            decimals
         });
 
     } catch (err) {
@@ -135,9 +150,6 @@ app.post("/create-qr-tx", async (req, res) => {
         res.status(500).json({ success: false, error: err.message });
     }
 });
-
-
-
 
 /* ============================================================
     CHECK PAYMENT STATUS
@@ -253,23 +265,70 @@ app.get("/session-status/:id", async (req, res) => {
         // 🟣 SOLANA MAINNET + DEVNET
         // -----------------------------------------
         if (["solana", "solana-devnet"].includes(payChain)) {
-            const conn = solanaConnections[payChain];
+            const conn = solanaConnections[payChain]; // assuming solanaConnections is predefined
+            if (session.payType === "native") {
+                const lamports = await conn.getBalance(new PublicKey(depositAddress));
+                const requiredLamports = parseInt(minValue);
 
-            const lamports = await conn.getBalance(new PublicKey(depositAddress));
+                if (BigInt(lamports) < requiredLamports) {
+                    return res.json({
+                        success: true,
+                        paid: false,
+                        currentBalance: lamports.toString(),
+                    });
+                }
 
-            const requiredLamports = parseInt(minValue);
- 
-            if (BigInt(lamports) < requiredLamports) {
-                return res.json({
-                    success: true,
-                    paid: false,
-                    currentBalance: lamports.toString(),
-                });
+                session.paymentStatus = "confirmed";
+                await session.save();
+                return res.json({ success: true, paid: true });
             }
 
-            session.paymentStatus = "confirmed";
-            await session.save();
-            return res.json({ success: true, paid: true });
+            if (session.payType === "usdt") {
+                // -------------------------
+                // 🔹 USDT (or any ERC20 token) check for Solana
+                // -------------------------
+
+                const usdtAddress = payTokenMap[payChain]; // USDT token address in `payTokenMap`
+                const usdtMint = new PublicKey(usdtAddress); // USDT token mint (e.g., for Solana devnet, it might be a known address)
+
+                // Get the associated token address for the deposit address and the USDT token mint
+                const associatedTokenAddress = await getAssociatedTokenAddress(usdtMint, new PublicKey(depositAddress));
+
+                try {
+                    // Fetch the token account for USDT
+                    const tokenAccount = await getAccount(conn, associatedTokenAddress);
+                    // Get the balance of the USDT token in the account
+                    const usdtBalance = tokenAccount.amount; // tokenAccount.amount is a BigNumber
+
+                    const requiredAmount = parseInt(minValue); // The minimum amount required
+
+                    // Check if the USDT balance meets the required amount
+                    if (usdtBalance < requiredAmount) {
+                        return res.json({
+                            success: true,
+                            paid: false,
+                            currentBalance: usdtBalance.toString(),
+                        });
+                    }
+
+                    // If balance is sufficient, update the session
+                    session.paymentStatus = "confirmed";
+                    await session.save();
+
+                    return res.json({
+                        success: true,
+                        paid: true,
+                        currentBalance: usdtBalance.toString(),
+                    });
+
+                } catch (error) {
+                    console.error("Error fetching USDT balance:", error);
+                    return res.json({
+                        success: false,
+                        error: "Failed to check USDT balance",
+                    });
+                }
+            }
         }
 
         // -----------------------------------------
@@ -363,9 +422,9 @@ app.post("/trigger-buy", async (req, res) => {
         }
 
         const ico = new ethers.Contract(
-            ICO_ADDRESS_BSC,
+            session.testnet ? ICO_ADDRESS_BSC_TESTNET : ICO_ADDRESS_BSC_MAINNET,
             ICO_ABI,
-            relayerWallet
+            session.testnet ? relayerWalletTestnet : relayerWalletMainnet
         );
 
         // Values from session
@@ -374,7 +433,7 @@ app.post("/trigger-buy", async (req, res) => {
         const referrer = session.referrer;
         const user = session.userAddress;
 
-        const bnbPrice = await getBnbPrice();
+        const bnbPrice = await getBnbPrice(session.testnet ? ICO_ADDRESS_BSC_TESTNET : ICO_ADDRESS_BSC_MAINNET, session.testnet ? bscProviderTestnet : bscProviderMainnet);
 
         const usdFloat = parseFloat(session.amountUsd);
         const usdAmount18 = BigInt(Math.round(usdFloat * 1e18));

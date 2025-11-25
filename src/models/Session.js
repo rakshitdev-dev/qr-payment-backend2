@@ -74,6 +74,7 @@ const SessionSchema = new mongoose.Schema(
     },
 
     executionTxHash: { type: String, default: null },
+    testnet: { type: Boolean, required: true, index: true },
 
 },
 {

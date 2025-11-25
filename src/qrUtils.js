@@ -1,3 +1,5 @@
+const { getMint } = require("@solana/spl-token");
+const { Connection, PublicKey } = require("@solana/web3.js");
 const QRCode = require("qrcode");
 
 const nativeDecimalsMap = {
@@ -38,7 +40,7 @@ const payTokenMap = {
     amoy: "0xEF5e41CbA24d1Bd6E86E58FD37bcab9ee28fc4e2",
     ethereum: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
     polygon: "0xc2132D05D31c914a87C6611C10748AaCBfF7c8F9",
-    "solana-devnet": null,
+    "solana-devnet": '7tiHCuMccAqHj6o7vQv7hsXBcDX8tJiViK5aPJhU9DY9',
     solana: null,
     tron: null,
     "tron-shasta": null,
@@ -67,11 +69,24 @@ function buildSolanaQrUri(address, amount, network) {
     return `solana:${address}?amount=${parseInt(amount) / (10 ** decimal)}&token=SOL&network=${chainIdMap[network]}`;
 }
 
-function buildSolanaTokenQrUri(address, amount, network) {
-    // Convert 18 decimals → 9 decimals for SOL or SPL tokens
+// For testing only
+async function getSplDecimals(chain) {
+    const endpoint = chain === "solana"
+        ? "https://api.mainnet-beta.solana.com"
+        : "https://api.devnet.solana.com";
 
+    const connection = new Connection(endpoint);
+    const mintInfo = await getMint(connection, new PublicKey(payTokenMap[chain]));
+    return mintInfo.decimals;
+}
+
+
+
+async function buildSolanaTokenQrUri(address, amount, network) {
+    // Convert 18 decimals → 9 decimals for SOL or SPL tokens
+    const decimal = await getSplDecimals(network);
     // return `solana:${address}?amount=${lamports}&token=${'SOL'}`;
-    return `solana:${address}?amount=${amount}&spl-token=4MTYjRXeFHXN5pCMzPbyXNV2XQ9yEr3hRuks9wL6TwXS&network=${chainIdMap[network]}`;
+    return `solana:${address}?amount=${parseInt(amount) / (10 ** decimal)}&spl-token=${payTokenMap[network]}`;
 }
 
 function buildBitcoinQrUri(address, amount18) {
@@ -108,7 +123,7 @@ async function generateDepositQrUniversal(payChain, depositAddress, paychainAmou
             if (payType === "native") {
                 uri = buildSolanaQrUri(depositAddress, paychainAmount, payChain);
             } else if (payType.toLowerCase() === "usdt") {
-                uri = buildSolanaTokenQrUri(depositAddress, paychainAmount, payChain);
+                uri = await buildSolanaTokenQrUri(depositAddress, paychainAmount, payChain);
             } else {
                 throw new Error(`Unsupported payType "${payType}" for ${payChain}`);
             }

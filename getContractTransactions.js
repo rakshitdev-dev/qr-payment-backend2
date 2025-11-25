@@ -7,19 +7,19 @@ const abi = require("./src/icoAbi.json");
 BigInt.prototype.toJSON = function () { return this.toString(); };
 
 const {
-    BSC_RPC,
-    ICO_ADDRESS_BSC
+    BSC_RPC_TESTNET,
+    ICO_ADDRESS_BSC_TESTNET
 } = process.env;
 
-if (!BSC_RPC) throw new Error("❌ Missing BSC_RPC in .env");
-if (!ICO_ADDRESS_BSC) throw new Error("❌ Missing ICO_ADDRESS_BSC in .env");
+if (!BSC_RPC_TESTNET) throw new Error("❌ Missing BSC_RPC_TESTNET in .env");
+if (!ICO_ADDRESS_BSC_TESTNET) throw new Error("❌ Missing ICO_ADDRESS_BSC_TESTNET in .env");
 
-const provider = new JsonRpcProvider(BSC_RPC);
-const contract = new Contract(ICO_ADDRESS_BSC, abi, provider);
+const provider = new JsonRpcProvider(BSC_RPC_TESTNET);
+const contract = new Contract(ICO_ADDRESS_BSC_TESTNET, abi, provider);
 
 async function getAllContractEvents() {
     const filter = {
-        address: ICO_ADDRESS_BSC,
+        address: ICO_ADDRESS_BSC_TESTNET,
         fromBlock: 0,
         toBlock: "latest",
     };
