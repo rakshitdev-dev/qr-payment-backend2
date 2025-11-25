@@ -2,7 +2,7 @@ const { ethers, HDNodeWallet } = require("ethers");
 const bip39 = require("bip39");
 const ed25519 = require("ed25519-hd-key");
 const { Keypair, PublicKey } = require("@solana/web3.js");
-const TronWeb = require("tronweb");
+const { TronWeb } = require("tronweb");
 const bitcoin = require("bitcoinjs-lib");
 
 /**
@@ -14,7 +14,7 @@ const bitcoin = require("bitcoinjs-lib");
  * - Bitcoin: m/44'/0'/0'/0/{index}
  */
 
-function deriveDepositAddress(mnemonic, index = 0, chain) {
+function deriveDepositAddress(mnemonic, index = 0, chain,testnet) {
     try {
         if (!bip39.validateMnemonic(mnemonic))
             throw new Error("Invalid mnemonic");
@@ -49,18 +49,21 @@ function deriveDepositAddress(mnemonic, index = 0, chain) {
              * ------------------------------------------- */
             case "tron":
             case "tron-shasta": {
-                const path = `m/44'/195'/0'/0/${index}`; // SLIP44: 195 for TRX
+                const path = `44'/195'/0'/0/${index}`; // SLIP44: 195 for TRX
 
-                const master = HDNodeWallet.fromMnemonic(mnemonic);
+                const master = HDNodeWallet.fromPhrase(mnemonic);
                 const child = master.derivePath(path);
 
-                const tron = new TronWeb({});
-                const tronAddress = tron.address.fromPrivateKey(child.privateKey);
-
+                const tron = new TronWeb({
+                    fullHost: testnet ? "https://api.shasta.trongrid.io" : "https://api.trongrid.io"
+                });
+              
+                const privateKey = child.privateKey.replace(/^0x/, "");
+                const tronAddress = tron.address.fromPrivateKey(privateKey);
                 return {
                     chain,
                     address: tronAddress,
-                    privateKey: child.privateKey,
+                    privateKey: privateKey,
                 };
             }
 

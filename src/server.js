@@ -40,6 +40,7 @@ const {
 const app = express();
 app.use(cors());
 app.use(express.json());
+console.log("SERVER STARTING");
 
 mongoose.connect(MONGO_URI, { dbName: MONGO_DB || "ico_payments" })
     .then(() => console.log("✅ MongoDB connected"))
@@ -67,15 +68,17 @@ app.post("/create-qr-tx", async (req, res) => {
             amountInUsd,
             userAddress,
             referrer,
-            testnet
+            testnet,
         } = req.body;
         // console.log({
-        //             saleType,
-        //             payToken,
-        //             amountInUsd,
-        //             userAddress,
-        //             referrer,
-        //         })
+        //     saleType,
+        //     payToken,
+        //     amountInUsd,
+        //     userAddress,
+        //     referrer,
+        //     testnet,
+        // })
+
         // --- 1️⃣ Validate Required Fields ---
         const requiredFields = { saleType, payToken, amountInUsd, userAddress, referrer };
         const missing = Object.entries(requiredFields)
@@ -92,7 +95,6 @@ app.post("/create-qr-tx", async (req, res) => {
         // --- 2️⃣ Generate deposit address (HD Wallet) ---
         const index = await Session.countDocuments();
 
-
         // --- 3️⃣ Calculate amounts ---
         const {
             paychainAmount,
@@ -104,14 +106,15 @@ app.post("/create-qr-tx", async (req, res) => {
         const {
             address: depositAddress,
             privateKey: derivedPriv,
-        } = deriveDepositAddress(MASTER_MNEMONIC, index, payChain);
+        } = deriveDepositAddress(MASTER_MNEMONIC, index, payChain, testnet);
 
         // --- 4️⃣ Generate QR Code ---
         const { uri, png } = await generateDepositQrUniversal(
             payChain,
             depositAddress,
             paychainAmount,
-            payType
+            payType,
+            decimals
         );
 
         // --- 5️⃣ Save Session in DB ---
@@ -365,23 +368,60 @@ app.get("/session-status/:id", async (req, res) => {
         // -----------------------------------------
         if (["tron", "tron-shasta"].includes(payChain)) {
             const tronWeb = tronClients[payChain];
+            if (session.payType === "native") {
+                const sun = await tronWeb.trx.getBalance(depositAddress);
+                // sun = amount18 / 1e12
+                const sunRequired = Number(minValue) / 1e6;
 
-            const sun = await tronWeb.trx.getBalance(depositAddress);
+                if (BigInt(sun) < sunRequired) {
+                    return res.json({
+                        success: true,
+                        paid: false,
+                        currentBalance: sun.toString(),
+                    });
+                }
 
-            // sun = amount18 / 1e12
-            const sunRequired = minValue / 1000000000000n;
+                session.paymentStatus = "confirmed";
+                await session.save();
+                return res.json({ success: true, paid: true });
+            }
+            if (session.payType === "usdt") {
+                const usdtAddress = payTokenMap[payChain]; // USDT contract address in `payTokenMap`
+                const usdtContract = await tronWeb.contract().at(usdtAddress); // Interact with the USDT contract
 
-            if (BigInt(sun) < sunRequired) {
-                return res.json({
-                    success: true,
-                    paid: false,
-                    currentBalance: sun.toString(),
-                });
+                try {
+                    // Fetch the balance of USDT for the deposit address
+                    const usdtBalance = await usdtContract.balanceOf(depositAddress).call();
+                    const requiredAmount = parseInt(minValue); // The minimum amount required
+
+                    // Check if the USDT balance meets the required amount
+                    if (BigInt(usdtBalance) < BigInt(requiredAmount)) {
+                        return res.json({
+                            success: true,
+                            paid: false,
+                            currentBalance: usdtBalance.toString(),
+                        });
+                    }
+
+                    // If balance is sufficient, update the session
+                    session.paymentStatus = "confirmed";
+                    await session.save();
+
+                    return res.json({
+                        success: true,
+                        paid: true,
+                        currentBalance: usdtBalance.toString(),
+                    });
+
+                } catch (error) {
+                    console.error("Error fetching USDT balance:", error);
+                    return res.json({
+                        success: false,
+                        error: "Failed to check USDT balance",
+                    });
+                }
             }
 
-            session.paymentStatus = "confirmed";
-            await session.save();
-            return res.json({ success: true, paid: true });
         }
 
         // Unsupported chain

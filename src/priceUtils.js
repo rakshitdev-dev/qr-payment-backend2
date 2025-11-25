@@ -1,20 +1,15 @@
 const { Contract, ZeroAddress } = require("ethers");
 const { BigNumber } = require("bignumber.js");
 const icoAbi = require("./icoAbi.json");
-const { evmProviders } = require("./providers");
+const { evmProviders, tronClients } = require("./providers");
 const { payTokenMap } = require("./qrUtils");
 const { Connection, PublicKey } = require("@solana/web3.js");
 const { getMint } = require("@solana/spl-token");
-const TronWeb = require("tronweb");
-
-
-const ERC20_ABI = [
-    "function decimals() view returns (uint8)"
-];
+const erc20Abi = require("./erc20Abi.json");
 
 async function getErc20Decimals(chain, tokenAddress) {
     const provider = evmProviders[chain];
-    const contract = new Contract(tokenAddress, ERC20_ABI, provider);
+    const contract = new Contract(tokenAddress, erc20Abi, provider);
     return Number(await contract.decimals());
 }
 
@@ -30,13 +25,7 @@ async function getSplDecimals(chain, mintAddress) {
 
 
 async function getTrc20Decimals(chain, tokenAddress) {
-    const tron = new TronWeb({
-        fullHost: chain === "tron"
-            ? "https://api.trongrid.io"
-            : "https://api.shasta.trongrid.io",
-    });
-
-    const contract = await tron.contract().at(tokenAddress);
+    const contract = await tronClients[chain].contract(erc20Abi, tokenAddress);
     const decimals = await contract.decimals().call();
     return Number(decimals);
 }

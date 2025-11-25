@@ -1,26 +1,4 @@
-const { getMint } = require("@solana/spl-token");
-const { Connection, PublicKey } = require("@solana/web3.js");
 const QRCode = require("qrcode");
-
-const nativeDecimalsMap = {
-    'sepolia': 18,
-    'ethereum': 18,
-
-    'amoy': 18,
-    'polygon': 18,
-
-    'bnb': 18,
-    'chapel': 18,
-
-    'solana': 9,
-    "solana-devnet": 9,
-
-    'bitcoin': 8,
-    "bitcoin-testnet4": 8,
-
-    'tron': 6,
-    "tron-shasta": 6,
-}
 
 const chainIdMap = {
     sepolia: 11155111,
@@ -31,8 +9,8 @@ const chainIdMap = {
     "solana-devnet": 'devnet',
     bitcoin: 0,
     "bitcoin-testnet4": 1,
-    tron: 1,
-    "tron-shasta": 2,
+    tron: 'trongrid',
+    "tron-shasta": 'shasta',
 };
 
 const payTokenMap = {
@@ -43,7 +21,7 @@ const payTokenMap = {
     "solana-devnet": '7tiHCuMccAqHj6o7vQv7hsXBcDX8tJiViK5aPJhU9DY9',
     solana: null,
     tron: null,
-    "tron-shasta": null,
+    "tron-shasta": "TNo2TQh5w1b5zC8zv1ByLp3preeNZR1ZSE",
     bitcoin: null,
     "bitcoin-testnet4": null
 };
@@ -64,29 +42,12 @@ function buildEvmTokenQrUri(chain, depositAddress, amount) {
     return `ethereum:${tokenAddress}@${chainId}/transfer?address=${depositAddress}&uint256=${amount}`;
 }
 
-function buildSolanaQrUri(address, amount, network) {
-    const decimal = nativeDecimalsMap.solana;
-    return `solana:${address}?amount=${parseInt(amount) / (10 ** decimal)}&token=SOL&network=${chainIdMap[network]}`;
+function buildSolanaQrUri(address, amount, network, decimals) {
+    return `solana:${address}?amount=${parseInt(amount) / (10 ** decimals)}&token=SOL&network=${chainIdMap[network]}`;
 }
 
-// For testing only
-async function getSplDecimals(chain) {
-    const endpoint = chain === "solana"
-        ? "https://api.mainnet-beta.solana.com"
-        : "https://api.devnet.solana.com";
-
-    const connection = new Connection(endpoint);
-    const mintInfo = await getMint(connection, new PublicKey(payTokenMap[chain]));
-    return mintInfo.decimals;
-}
-
-
-
-async function buildSolanaTokenQrUri(address, amount, network) {
-    // Convert 18 decimals → 9 decimals for SOL or SPL tokens
-    const decimal = await getSplDecimals(network);
-    // return `solana:${address}?amount=${lamports}&token=${'SOL'}`;
-    return `solana:${address}?amount=${parseInt(amount) / (10 ** decimal)}&spl-token=${payTokenMap[network]}`;
+function buildSolanaTokenQrUri(address, amount, network, decimals) {
+    return `solana:${address}?amount=${parseInt(amount) / (10 ** decimals)}&spl-token=${payTokenMap[network]}`;
 }
 
 function buildBitcoinQrUri(address, amount18) {
@@ -95,13 +56,18 @@ function buildBitcoinQrUri(address, amount18) {
     return `bitcoin:${address}?amount=${Number(sats)}`;
 }
 
-function buildTronQrUri(address, amount18, tokenSymbol = "TRX") {
-    // Convert 18 decimals → 6 decimals for TRX or TRC20 tokens
-    const sun = BigInt(amount18) / BigInt(1e12);
-    return `tron:${address}?amount=${sun}&token=${tokenSymbol}`;
+function buildTronQrUri(address, amount, network, decimals) {
+    const sun = BigInt(amount) / BigInt(10 ** decimals);
+    return `tron:${address}?amount=${sun}${network == 'tron-shasta' ? '&network=shasta' : ''}`;
 }
 
-async function generateDepositQrUniversal(payChain, depositAddress, paychainAmount, payType = "native") {
+function buildTronTokenQrUri(address, amount, network, decimals) {
+    const humanAmount = Number(amount) / 10 ** Number(decimals);
+
+    return `tron:${payTokenMap[network]}/transfer?address=${address}&amount=${humanAmount}${network == 'tron-shasta' ? '&network=shasta' : ''}`;
+}
+
+async function generateDepositQrUniversal(payChain, depositAddress, paychainAmount, payType = "native", decimals) {
     let uri;
 
     switch (payChain) {
@@ -121,9 +87,9 @@ async function generateDepositQrUniversal(payChain, depositAddress, paychainAmou
         case "solana":
         case "solana-devnet":
             if (payType === "native") {
-                uri = buildSolanaQrUri(depositAddress, paychainAmount, payChain);
+                uri = buildSolanaQrUri(depositAddress, paychainAmount, payChain, decimals);
             } else if (payType.toLowerCase() === "usdt") {
-                uri = await buildSolanaTokenQrUri(depositAddress, paychainAmount, payChain);
+                uri = buildSolanaTokenQrUri(depositAddress, paychainAmount, payChain, decimals);
             } else {
                 throw new Error(`Unsupported payType "${payType}" for ${payChain}`);
             }
@@ -140,9 +106,9 @@ async function generateDepositQrUniversal(payChain, depositAddress, paychainAmou
         case "tron":
         case "tron-shasta":
             if (payType === "native") {
-                uri = buildTronQrUri(depositAddress, paychainAmount, "TRX");
+                uri = buildTronQrUri(depositAddress, paychainAmount, payChain, decimals);
             } else if (payType.toLowerCase() === "usdt") {
-                uri = buildTronQrUri(depositAddress, paychainAmount, "USDT");
+                uri = buildTronTokenQrUri(depositAddress, paychainAmount, payChain, decimals);
             } else {
                 throw new Error(`Unsupported payType "${payType}" for ${payChain}`);
             }
@@ -151,7 +117,6 @@ async function generateDepositQrUniversal(payChain, depositAddress, paychainAmou
         default:
             throw new Error(`QR generation not supported for chain: ${payChain}`);
     }
-
     const png = await QRCode.toDataURL(uri);
     return { uri, png };
 }

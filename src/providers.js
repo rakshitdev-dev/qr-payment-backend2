@@ -1,7 +1,7 @@
 require("dotenv").config();
 const { JsonRpcProvider } = require("ethers");
 const { Connection } = require("@solana/web3.js");
-const TronWeb = require("tronweb");
+const { TronWeb } = require("tronweb");
 const axios = require("axios");
 
 // ------------------------------------
@@ -9,7 +9,7 @@ const axios = require("axios");
 // Supports: Ethereum, Polygon, Sepolia, Amoy,
 //           BSC mainnet, BSC testnet
 // ------------------------------------
-infuraKey=process.env.INFURA_API_KEY
+infuraKey = process.env.INFURA_API_KEY
 
 const evmProviders = {
     // Ethereum
@@ -44,18 +44,17 @@ const solanaConnections = {
 // ------------------------------------
 // 🔴 TRON CLIENTS
 // ------------------------------------
-// const tronClients = {
-//     tron: new TronWeb({
-//         fullHost: "https://api.trongrid.io",
-//         privateKey: null
-//     }),
-//     "tron-shasta": new TronWeb({
-//         fullHost: "https://api.shasta.trongrid.io",
-//         privateKey: null
-//     })
-// };
+const tronClients = {
+    'tron': new TronWeb({
+        fullHost: "https://api.trongrid.io",
+        privateKey: 'b03a5d4560f61fd2cf94a9a25f7a2f5667dba9dfd08756eedf907f9ec5df984a'//0 balance private key
+    }),
+    "tron-shasta": new TronWeb({
+        fullHost: "https://api.shasta.trongrid.io",
+        privateKey: 'b03a5d4560f61fd2cf94a9a25f7a2f5667dba9dfd08756eedf907f9ec5df984a'//0 balance private key
+    })
+};
 
-const tronClients={} // for now will check it later
 
 // ------------------------------------
 // 🟧 BITCOIN UTXO API (Blockstream)
