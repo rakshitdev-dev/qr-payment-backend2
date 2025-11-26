@@ -63,7 +63,7 @@ const mapChainToBinanceSymbol = (chain) => {
         "solana-devnet": "SOLUSDT",
 
         bitcoin: "BTCUSDT",
-        "bitcoin-testnet4": "BTCUSDT",
+        "bitcoin-testnet3": "BTCUSDT",
 
         tron: "TRXUSDT",
         "tron-shasta": "TRXUSDT",
@@ -95,7 +95,7 @@ async function getTokenDecimals(chain) {
         // --------------------------  
         // 4️⃣ Bitcoin Tokens  
         // --------------------------
-        case ["bitcoin", "bitcoin-testnet4"].includes(chain):
+        case ["bitcoin", "bitcoin-testnet3"].includes(chain):
             // Omni USDT = 8 decimals (if used)
             return 8;
 
@@ -117,7 +117,7 @@ const nativeDecimalsMap = {
     "solana-devnet": 9,
 
     'bitcoin': 8,
-    "bitcoin-testnet4": 8,
+    "bitcoin-testnet3": 8,
 
     'tron': 6,
     "tron-shasta": 6,
@@ -149,6 +149,10 @@ const getAmountsData = async (payToken, amountInUsd) => {
     } else {
         // Native coins
         priceSymbol = mapChainToBinanceSymbol(baseChain);
+        console.log(baseChain, priceSymbol);
+        if (!priceSymbol) {
+            throw new Error(`Price symbol mapping not found for chain: ${baseChain}`);
+        }
     }
 
     let priceUsd = 1; // For USDT

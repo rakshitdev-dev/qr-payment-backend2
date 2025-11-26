@@ -36,7 +36,7 @@ const SessionSchema = new mongoose.Schema(
             "sepolia",
             "amoy",
             "solana-devnet",
-            "bitcoin-testnet4",
+            "bitcoin-testnet3",
             "tron-shasta",
             "ethereum",
             "polygon",

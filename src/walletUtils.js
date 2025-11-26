@@ -1,9 +1,13 @@
-const { ethers, HDNodeWallet } = require("ethers");
-const bip39 = require("bip39");
+const hdkey = require('hdkey');
+const bip39 = require('bip39');
 const ed25519 = require("ed25519-hd-key");
-const { Keypair, PublicKey } = require("@solana/web3.js");
+const { Keypair } = require("@solana/web3.js");
 const { TronWeb } = require("tronweb");
 const bitcoin = require("bitcoinjs-lib");
+const ECPairFactory = require('ecpair').ECPairFactory;
+const tinysecp = require('tiny-secp256k1');
+
+const ECPair = ECPairFactory(tinysecp);
 
 /**
  * Derive deposit address across multiple chains:
@@ -14,15 +18,15 @@ const bitcoin = require("bitcoinjs-lib");
  * - Bitcoin: m/44'/0'/0'/0/{index}
  */
 
-function deriveDepositAddress(mnemonic, index = 0, chain,testnet) {
+async function deriveDepositAddress(mnemonic, index = 0, chain, testnet) {
     try {
-        if (!bip39.validateMnemonic(mnemonic))
+        if (!bip39.validateMnemonic(mnemonic)) {
             throw new Error("Invalid mnemonic");
+        }
 
         const seed = bip39.mnemonicToSeedSync(mnemonic);
 
         switch (chain) {
-
             /* -------------------------------------------
              * 1️⃣ EVM (ETH, BNB, MATIC)
              * ------------------------------------------- */
@@ -31,16 +35,16 @@ function deriveDepositAddress(mnemonic, index = 0, chain,testnet) {
             case "bsc":
             case "sepolia":
             case "amoy": {
-                const path = `44'/60'/0'/0/${index}`;  // Ensure depth of 4 here
+                const path = `m/44'/60'/0'/0/${index}`;  // BIP-44 path for Ethereum
 
-                // ethers v6
-                const master = HDNodeWallet.fromPhrase(mnemonic);
-                const child = master.derivePath(path);  // This should work for a depth of 4
+                // Create master key from the seed using hdkey
+                const master = hdkey.fromMasterSeed(seed);
+                const child = master.derive(path);  // Derive child key using hdkey
 
                 return {
                     chain,
-                    address: child.address,
-                    privateKey: child.privateKey,
+                    address: `0x${child.publicKey.slice(-20).toString('hex')}`, // Convert public key to Ethereum address
+                    privateKey: child.privateKey.toString('hex'),
                 };
             }
 
@@ -49,21 +53,22 @@ function deriveDepositAddress(mnemonic, index = 0, chain,testnet) {
              * ------------------------------------------- */
             case "tron":
             case "tron-shasta": {
-                const path = `44'/195'/0'/0/${index}`; // SLIP44: 195 for TRX
+                const path = `m/44'/195'/0'/0/${index}`; // SLIP44: 195 for TRX
 
-                const master = HDNodeWallet.fromPhrase(mnemonic);
-                const child = master.derivePath(path);
+                // Create master key from the seed using hdkey
+                const master = hdkey.fromMasterSeed(seed);
+                const child = master.derive(path);  // Derive child key using hdkey
 
                 const tron = new TronWeb({
                     fullHost: testnet ? "https://api.shasta.trongrid.io" : "https://api.trongrid.io"
                 });
-              
-                const privateKey = child.privateKey.replace(/^0x/, "");
+
+                const privateKey = child.privateKey.toString('hex');
                 const tronAddress = tron.address.fromPrivateKey(privateKey);
                 return {
                     chain,
                     address: tronAddress,
-                    privateKey: privateKey,
+                    privateKey,
                 };
             }
 
@@ -74,7 +79,9 @@ function deriveDepositAddress(mnemonic, index = 0, chain,testnet) {
             case "solana-devnet": {
                 const path = `m/44'/501'/${index}'/0'`;
 
-                const derived = ed25519.derivePath(path, seed.toString("hex"));
+                // Generate the root key using hdkey and then use ed25519 for Solana key generation
+                const master = hdkey.fromMasterSeed(seed);
+                const derived = ed25519.derivePath(path, master.privateKey.toString('hex'));
                 const keypair = Keypair.fromSeed(derived.key);
 
                 return {
@@ -88,34 +95,32 @@ function deriveDepositAddress(mnemonic, index = 0, chain,testnet) {
              * 4️⃣ Bitcoin (BTC / Testnet)
              * ------------------------------------------- */
             case "bitcoin":
-            case "bitcoin-testnet4": {
-                const testnet = chain === "bitcoin-testnet4";
+            case "bitcoin-testnet3": {
+                const network = chain === "bitcoin-testnet3" ? bitcoin.networks.testnet : bitcoin.networks.bitcoin;
+                const path = `m/44'/${network.bip32.public}'/0'/0/${index}`;
 
-                const network = testnet
-                    ? bitcoin.networks.testnet
-                    : bitcoin.networks.bitcoin;
+                // Create master key from the seed using hdkey
+                const root = hdkey.fromMasterSeed(seed);
+                const child = root.derive(path);  // Derive child key using hdkey
 
-                const path = `m/44'/${testnet ? 1 : 0}'/0'/0/${index}`;
-
-                const root = bitcoin.bip32.fromSeed(seed, network);
-                const child = root.derivePath(path);
-
-                const { address } = bitcoin.payments.p2pkh({
+                // Generate the P2PKH address from the derived public key
+                const { address } = bitcoin.payments.p2wpkh({
                     pubkey: child.publicKey,
                     network,
                 });
 
+                const wif = ECPair.fromPrivateKey(child.privateKey, { network }).toWIF();
+
                 return {
                     chain,
                     address,
-                    privateKey: child.toWIF(), // WIF format
+                    privateKey: wif,
                 };
             }
 
             default:
                 throw new Error(`Unsupported chain: ${chain}`);
         }
-
     } catch (e) {
         console.error("❌ Derive wallet error:", e.message);
         throw e;

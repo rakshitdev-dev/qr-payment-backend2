@@ -61,20 +61,28 @@ const tronClients = {
 // Supports: mainnet + testnet4
 // ------------------------------------
 const bitcoinApi = {
-    async getUtxos(address, isTestnet4 = false) {
-        const baseUrl = isTestnet4
-            ? "https://blockstream.info/testnet/api"
-            : "https://blockstream.info/api";
+    async getUtxos(address, isTestnet = false) {
+        const baseUrl = isTestnet
+            ? "https://api.blockcypher.com/v1/btc/test3/addrs/"
+            : "https://api.blockcypher.com/v1/btc/main/addrs/";
+
+        const url = `${baseUrl}${address}/?unspent=true`;  // Added `unspent=true` for UTXOs
 
         try {
-            const { data } = await axios.get(`${baseUrl}/address/${address}/utxo`);
-            return data || [];
-        } catch (err) {
-            console.error("Bitcoin API error:", err.message);
-            return [];
+            const response = await fetch(url);
+
+            if (!response.ok) {
+                throw new Error(`Failed to fetch data from Blockcypher: ${response.statusText}`);
+            }
+
+            const data = await response.json(); // Parse the response as JSON
+            return data;
+        } catch (error) {
+            throw("Error fetching UTXOs:", error);
         }
     }
 };
+
 
 
 

@@ -8,7 +8,7 @@ const chainIdMap = {
     solana: 'mainnet-beta',
     "solana-devnet": 'devnet',
     bitcoin: 0,
-    "bitcoin-testnet4": 1,
+    "bitcoin-testnet3": 1,
     tron: 'trongrid',
     "tron-shasta": 'shasta',
 };
@@ -23,7 +23,7 @@ const payTokenMap = {
     tron: null,
     "tron-shasta": "TNo2TQh5w1b5zC8zv1ByLp3preeNZR1ZSE",
     bitcoin: null,
-    "bitcoin-testnet4": null
+    "bitcoin-testnet3": null
 };
 
 function buildEvmQrUri(chain, address, amount) {
@@ -50,9 +50,9 @@ function buildSolanaTokenQrUri(address, amount, network, decimals) {
     return `solana:${address}?amount=${parseInt(amount) / (10 ** decimals)}&spl-token=${payTokenMap[network]}`;
 }
 
-function buildBitcoinQrUri(address, amount18) {
+function buildBitcoinQrUri(address, amount, decimals) {
     // Convert 18 decimals → 8 decimals for BTC
-    const sats = BigInt(amount18) / BigInt(1e10);
+    const sats = amount / 10 ** decimals;
     return `bitcoin:${address}?amount=${Number(sats)}`;
 }
 
@@ -96,11 +96,11 @@ async function generateDepositQrUniversal(payChain, depositAddress, paychainAmou
             break;
 
         case "bitcoin":
-        case "bitcoin-testnet4":
+        case "bitcoin-testnet3":
             if (payType !== "native") {
                 throw new Error(`Token transfers not supported on Bitcoin`);
             }
-            uri = buildBitcoinQrUri(depositAddress, paychainAmount);
+            uri = buildBitcoinQrUri(depositAddress, paychainAmount, decimals);
             break;
 
         case "tron":

@@ -6,7 +6,7 @@ const Session = require("./models/Session");
 const { ethers, ZeroAddress } = require("ethers");
 const { deriveDepositAddress } = require("./walletUtils");
 const ICO_ABI = require("./icoAbi.json");
-const { getAmountsData, getBnbPrice } = require("./priceUtils");
+const { getAmountsData, getBnbPrice, nativeDecimalsMap } = require("./priceUtils");
 const { generateDepositQrUniversal, payTokenMap } = require("./qrUtils");
 const { PublicKey } = require("@solana/web3.js");
 // Load providers from providers.js
@@ -40,7 +40,6 @@ const {
 const app = express();
 app.use(cors());
 app.use(express.json());
-console.log("SERVER STARTING");
 
 mongoose.connect(MONGO_URI, { dbName: MONGO_DB || "ico_payments" })
     .then(() => console.log("✅ MongoDB connected"))
@@ -106,7 +105,7 @@ app.post("/create-qr-tx", async (req, res) => {
         const {
             address: depositAddress,
             privateKey: derivedPriv,
-        } = deriveDepositAddress(MASTER_MNEMONIC, index, payChain, testnet);
+        } = await deriveDepositAddress(MASTER_MNEMONIC, index, payChain, testnet);
 
         // --- 4️⃣ Generate QR Code ---
         const { uri, png } = await generateDepositQrUniversal(
@@ -337,24 +336,18 @@ app.get("/session-status/:id", async (req, res) => {
         // -----------------------------------------
         // 🟧 BITCOIN MAINNET + TESTNET4
         // -----------------------------------------
-        if (["bitcoin", "bitcoin-testnet4"].includes(payChain)) {
-            const isTestnet = payChain === "bitcoin-testnet4";
+        if (["bitcoin", "bitcoin-testnet3"].includes(payChain)) {
+            const isTestnet = payChain === "bitcoin-testnet3";
 
             // sats = amount18 / 1e10 (reverse QR logic)
-            const satsRequired = minValue / 10000000000n;
 
-            const utxos = await bitcoinApi.getUtxos(depositAddress, isTestnet);
-
-            const totalSats = utxos.reduce(
-                (sum, utxo) => sum + BigInt(utxo.value),
-                0n
-            );
-
-            if (totalSats < satsRequired) {
+            const { final_balance } = await bitcoinApi.getUtxos(depositAddress, isTestnet);
+console.log(depositAddress,final_balance,parseInt(minValue))
+            if (final_balance < parseInt(minValue)) {
                 return res.json({
                     success: true,
                     paid: false,
-                    currentBalance: totalSats.toString(),
+                    currentBalance: (final_balance / 10 ** nativeDecimalsMap[payChain]).toString(),
                 });
             }
 
@@ -508,6 +501,40 @@ app.post("/trigger-buy", async (req, res) => {
         return res.status(500).json({ success: false, error: err.message });
     }
 });
+
+
+app.get("/sessions", async (req, res) => {
+    try {
+        const { page = 1, limit = 10 } = req.query;  // Default to page 1, limit 10
+
+        // Skip and limit logic
+        const skip = (page - 1) * limit;
+
+        // Fetch sessions with pagination
+        const sessions = await Session.find().skip(skip).limit(limit);
+
+        // If no sessions found, return a message
+        if (sessions.length === 0) {
+            return res.status(404).json({ success: false, error: "No sessions found" });
+        }
+
+        // Count total sessions for pagination info
+        const totalSessions = await Session.countDocuments();
+
+        return res.json({
+            success: true,
+            sessions,
+            totalSessions,
+            totalPages: Math.ceil(totalSessions / limit),
+            currentPage: page
+        });
+
+    } catch (err) {
+        console.error("Error fetching sessions:", err);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 
 /* ============================================================
     START SERVER
