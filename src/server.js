@@ -3,7 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
 const Session = require("./models/Session");
-const { ethers, ZeroAddress } = require("ethers");
+const { ZeroAddress, formatEther, Contract, getAssociatedTokenAddress, getAccount, Wallet, JsonRpcProvider } = require("ethers");
 const { deriveDepositAddress } = require("./walletUtils");
 const ICO_ABI = require("./icoAbi.json");
 const { getAmountsData, getBnbPrice, nativeDecimalsMap } = require("./priceUtils");
@@ -16,10 +16,6 @@ const {
     tronClients,
     bitcoinApi
 } = require("./providers");
-const { Contract } = require("ethers");
-const { getAssociatedTokenAddress, getAccount } = require("@solana/spl-token");
-const { Wallet } = require("ethers");
-const { JsonRpcProvider } = require("ethers");
 
 // Your Session model
 
@@ -42,7 +38,7 @@ app.use(cors());
 app.use(express.json());
 
 mongoose.connect(MONGO_URI, { dbName: MONGO_DB || "ico_payments" })
-    .then(() => console.log("✅ MongoDB connected"))
+    .then(() => console.info("✅ MongoDB connected"))
     .catch(err => console.error("Mongo error:", err));
 
 // RPC providers
@@ -192,7 +188,7 @@ app.get("/session-status/:id", async (req, res) => {
         const minValue = BigInt(amountPayChain);
 
         // -----------------------------------------
-        // 🟦 EVM CHAINS (ETH, Polygon, Sepolia, Amoy, BSC, BSC-testnet4)
+        // 🟦 EVM CHAINS (ETH, Polygon, Sepolia, Amoy, BSC, BSC-testnet)
         // -----------------------------------------
         const evmChains = [
             "sepolia",
@@ -216,7 +212,7 @@ app.get("/session-status/:id", async (req, res) => {
                     return res.json({
                         success: true,
                         paid: false,
-                        currentBalance: ethers.formatEther(balance)
+                        currentBalance: formatEther(balance)
                     });
                 }
 
@@ -342,7 +338,7 @@ app.get("/session-status/:id", async (req, res) => {
             // sats = amount18 / 1e10 (reverse QR logic)
 
             const { final_balance } = await bitcoinApi.getUtxos(depositAddress, isTestnet);
-console.log(depositAddress,final_balance,parseInt(minValue))
+
             if (final_balance < parseInt(minValue)) {
                 return res.json({
                     success: true,
@@ -454,7 +450,7 @@ app.post("/trigger-buy", async (req, res) => {
             });
         }
 
-        const ico = new ethers.Contract(
+        const ico = new Contract(
             session.testnet ? ICO_ADDRESS_BSC_TESTNET : ICO_ADDRESS_BSC_MAINNET,
             ICO_ABI,
             session.testnet ? relayerWalletTestnet : relayerWalletMainnet
@@ -541,5 +537,5 @@ app.get("/sessions", async (req, res) => {
 ============================================================ */
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-    console.log(`🚀 Backend running on port ${PORT}`);
+    console.info(`🚀 Backend running on port ${PORT}`);
 });
